@@ -60,6 +60,24 @@ cargo run --release
 Launching the app while it's already running brings the existing window to
 the front instead of opening a second one.
 
+### Installing the icon and desktop entry
+
+To get the app in your launcher with its icon, install the binary, the
+desktop entry and the icons into your home directory:
+
+```sh
+cargo install --path .
+install -Dm644 data/us.jlong.NoiseGenerator.desktop \
+    ~/.local/share/applications/us.jlong.NoiseGenerator.desktop
+install -Dm644 data/icons/hicolor/scalable/apps/us.jlong.NoiseGenerator.svg \
+    ~/.local/share/icons/hicolor/scalable/apps/us.jlong.NoiseGenerator.svg
+install -Dm644 data/icons/hicolor/symbolic/apps/us.jlong.NoiseGenerator-symbolic.svg \
+    ~/.local/share/icons/hicolor/symbolic/apps/us.jlong.NoiseGenerator-symbolic.svg
+```
+
+The icon shows the ten equalizer bands, colored brown, pink, white, blue and
+violet from low to high frequency.
+
 ## Usage
 
 1. Pick a noise color, or drag the equalizer sliders to shape your own sound.
@@ -137,6 +155,7 @@ atomics, so the audio callback never waits on a lock or allocates memory.
 | `src/settings.rs`      | Loading and saving `settings.ini`                        |
 | `src/user_presets.rs`  | Saving, loading, renaming and deleting presets           |
 | `src/mpris.rs`         | MPRIS D-Bus interface                                     |
+| `data/`                | Desktop entry and app icons (full-color and symbolic)    |
 
 ## Tests
 

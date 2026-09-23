@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Noise Generator
+Comment=Play white, pink, brown and other colored noise
+Exec=noise-generator
+Icon=us.jlong.NoiseGenerator
+Terminal=false
+Categories=AudioVideo;Audio;GTK;
+Keywords=noise;white;pink;brown;sleep;focus;equalizer;
+StartupNotify=true

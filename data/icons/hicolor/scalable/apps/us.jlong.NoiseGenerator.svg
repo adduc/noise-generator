@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="face" x1="0" y1="12" x2="0" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#34385a"/>
+      <stop offset="1" stop-color="#1f2238"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="30" x2="0" y2="94" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.35"/>
+      <stop offset="0.5" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.2"/>
+    </linearGradient>
+    <clipPath id="faceClip">
+      <rect x="12" y="12" width="104" height="96" rx="18"/>
+    </clipPath>
+    <mask id="barMask">
+    <rect x="23.5" y="64" width="5.4" height="30" rx="2.7" fill="#fff"/>
+    <rect x="31.9" y="48" width="5.4" height="46" rx="2.7" fill="#fff"/>
+    <rect x="40.3" y="36" width="5.4" height="58" rx="2.7" fill="#fff"/>
+    <rect x="48.7" y="44" width="5.4" height="50" rx="2.7" fill="#fff"/>
+    <rect x="57.1" y="54" width="5.4" height="40" rx="2.7" fill="#fff"/>
+    <rect x="65.5" y="40" width="5.4" height="54" rx="2.7" fill="#fff"/>
+    <rect x="73.9" y="30" width="5.4" height="64" rx="2.7" fill="#fff"/>
+    <rect x="82.3" y="46" width="5.4" height="48" rx="2.7" fill="#fff"/>
+    <rect x="90.7" y="58" width="5.4" height="36" rx="2.7" fill="#fff"/>
+    <rect x="99.1" y="70" width="5.4" height="24" rx="2.7" fill="#fff"/>
+    </mask>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.4 -0.55"/>
+    </filter>
+  </defs>
+  <!-- Darker slab below the face gives the GNOME-style thickness. -->
+  <rect x="12" y="18" width="104" height="96" rx="18" fill="#15172a"/>
+  <rect x="12" y="12" width="104" height="96" rx="18" fill="url(#face)"/>
+  <!-- Static grain: a "noise" texture on the screen. -->
+  <g clip-path="url(#faceClip)" opacity="0.14">
+    <rect x="12" y="12" width="104" height="96" filter="url(#grain)"/>
+  </g>
+  <rect x="22" y="97" width="84" height="2" rx="1" fill="#fff" opacity="0.12"/>
+  <!-- Equalizer bars, low to high frequency: brown, pink, white, blue, violet. -->
+  <g>
+    <rect x="23.5" y="64" width="5.4" height="30" rx="2.7" fill="#8a5a3b"/>
+    <rect x="31.9" y="48" width="5.4" height="46" rx="2.7" fill="#b0704f"/>
+    <rect x="40.3" y="36" width="5.4" height="58" rx="2.7" fill="#e07a9a"/>
+    <rect x="48.7" y="44" width="5.4" height="50" rx="2.7" fill="#f0a3bb"/>
+    <rect x="57.1" y="54" width="5.4" height="40" rx="2.7" fill="#f5f3f7"/>
+    <rect x="65.5" y="40" width="5.4" height="54" rx="2.7" fill="#e6ecf7"/>
+    <rect x="73.9" y="30" width="5.4" height="64" rx="2.7" fill="#8cc4f5"/>
+    <rect x="82.3" y="46" width="5.4" height="48" rx="2.7" fill="#4f9ae8"/>
+    <rect x="90.7" y="58" width="5.4" height="36" rx="2.7" fill="#7d6cf0"/>
+    <rect x="99.1" y="70" width="5.4" height="24" rx="2.7" fill="#a05ce8"/>
+  </g>
+  <rect x="22" y="28" width="84" height="66" fill="url(#sheen)" mask="url(#barMask)"/>
+  <rect x="12.5" y="12.5" width="103" height="95" rx="17.5" fill="none" stroke="#fff" stroke-opacity="0.08"/>
+</svg>

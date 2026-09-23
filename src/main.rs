@@ -1,5 +1,6 @@
 mod audio;
 mod noise;
+mod settings;
 
 use std::cell::Cell;
 use std::sync::Arc;
@@ -12,11 +13,19 @@ use gtk::{
 
 use audio::Controls;
 use noise::{Preset, BAND_COUNT, MAX_DB, MIN_DB};
+use settings::Settings;
 
 const APP_ID: &str = "us.jlong.NoiseGenerator";
 
 fn main() -> glib::ExitCode {
     let controls = Controls::new();
+
+    // Apply saved settings before audio starts, so the first sound is already right.
+    let settings = Settings::load();
+    for (band, db) in settings.band_db.iter().enumerate() {
+        controls.set_band_db(band, *db);
+    }
+    controls.set_volume(settings.volume);
 
     // The stream must stay alive for the whole program, so it lives here in
     // main (cpal streams are not Send, so it can't move into GTK callbacks freely).
@@ -29,11 +38,11 @@ fn main() -> glib::ExitCode {
     };
 
     let app = Application::builder().application_id(APP_ID).build();
-    app.connect_activate(move |app| build_ui(app, controls.clone()));
+    app.connect_activate(move |app| build_ui(app, controls.clone(), &settings));
     app.run()
 }
 
-fn build_ui(app: &Application, controls: Arc<Controls>) {
+fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
     let root = GtkBox::builder()
         .orientation(Orientation::Vertical)
         .spacing(18)
@@ -57,7 +66,7 @@ fn build_ui(app: &Application, controls: Arc<Controls>) {
             let scale = Scale::with_range(Orientation::Vertical, MIN_DB as f64, MAX_DB as f64, 1.0);
             // Vertical scales put the minimum at the top by default.
             scale.set_inverted(true);
-            scale.set_value(0.0);
+            scale.set_value(settings.band_db[band] as f64);
             scale.set_digits(0);
             scale.set_draw_value(true);
             scale.set_value_pos(PositionType::Top);
@@ -107,7 +116,7 @@ fn build_ui(app: &Application, controls: Arc<Controls>) {
     let volume_row = GtkBox::builder().orientation(Orientation::Horizontal).spacing(12).build();
     volume_row.append(&Label::new(Some("Volume")));
     let volume = Scale::with_range(Orientation::Horizontal, 0.0, 1.0, 0.01);
-    volume.set_value(0.5);
+    volume.set_value(settings.volume as f64);
     volume.set_hexpand(true);
     volume.set_draw_value(false);
     {
@@ -141,5 +150,15 @@ fn build_ui(app: &Application, controls: Arc<Controls>) {
         .resizable(false)
         .child(&root)
         .build();
+    window.connect_close_request(move |_| {
+        let settings = Settings {
+            band_db: std::array::from_fn(|band| sliders[band].value() as f32),
+            volume: volume.value() as f32,
+        };
+        if let Err(err) = settings.save() {
+            eprintln!("failed to save settings: {err}");
+        }
+        glib::Propagation::Proceed
+    });
     window.present();
 }

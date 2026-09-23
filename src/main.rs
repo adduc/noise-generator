@@ -49,7 +49,8 @@ fn main() -> glib::ExitCode {
     let app = Application::builder().application_id(APP_ID).build();
     // The icon is installed under the app ID (see data/icons). GNOME on Wayland
     // takes it from the .desktop file; this covers X11 and other desktops.
-    gtk::Window::set_default_icon_name(APP_ID);
+    // It must run in startup: GTK isn't initialized until the app starts.
+    app.connect_startup(|_| gtk::Window::set_default_icon_name(APP_ID));
     app.connect_activate(move |app| {
         // Launching again activates the running instance: show its window
         // rather than building a second one.

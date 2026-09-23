@@ -54,26 +54,32 @@ sudo apt install libgtk-4-dev libasound2-dev
 ## Building and running
 
 ```sh
-cargo run --release
+make        # build a release binary
+make run    # build and run it
 ```
 
 Launching the app while it's already running brings the existing window to
 the front instead of opening a second one.
 
-### Installing the icon and desktop entry
+### Installing
 
 To get the app in your launcher with its icon, install the binary, the
-desktop entry and the icons into your home directory:
+desktop entry and the icons into `~/.local`:
 
 ```sh
-cargo install --path .
-install -Dm644 data/us.jlong.NoiseGenerator.desktop \
-    ~/.local/share/applications/us.jlong.NoiseGenerator.desktop
-install -Dm644 data/icons/hicolor/scalable/apps/us.jlong.NoiseGenerator.svg \
-    ~/.local/share/icons/hicolor/scalable/apps/us.jlong.NoiseGenerator.svg
-install -Dm644 data/icons/hicolor/symbolic/apps/us.jlong.NoiseGenerator-symbolic.svg \
-    ~/.local/share/icons/hicolor/symbolic/apps/us.jlong.NoiseGenerator-symbolic.svg
+make
+make install
 ```
+
+`make uninstall` removes them again. For a system-wide install, set
+`PREFIX`, and build first so cargo doesn't run as root:
+
+```sh
+make
+sudo make install PREFIX=/usr/local
+```
+
+`DESTDIR` is supported for staged installs when packaging.
 
 The icon shows the ten equalizer bands, colored brown, pink, white, blue and
 violet from low to high frequency.
@@ -160,7 +166,7 @@ atomics, so the audio callback never waits on a lock or allocates memory.
 ## Tests
 
 ```sh
-cargo test
+make test
 ```
 
 The tests check that every preset produces the target loudness at 44.1 and

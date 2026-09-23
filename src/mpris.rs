@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 John Long
+
 //! MPRIS D-Bus interface (https://specifications.freedesktop.org/mpris-spec/latest/).
 //! Desktops route hardware media keys (play/pause, next, previous) to MPRIS
 //! players, so this makes them work without the window focused, and puts

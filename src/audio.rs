@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 John Long
+
 //! Audio output. The GTK thread and the real-time audio thread share state
 //! only through atomics, so the audio callback never blocks on a lock.
 

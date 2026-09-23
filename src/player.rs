@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 John Long
+
 //! UI-side playback state: play/pause, volume, and which preset is active.
 //! The window, the presets popover and MPRIS all go through `Player`, so
 //! they always agree, and listeners hear about every change.

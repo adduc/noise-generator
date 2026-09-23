@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 John Long
+
 //! Persists EQ and volume between runs in an INI-style file under the XDG
 //! config dir (usually ~/.config/noise-generator/settings.ini). GLib's
 //! KeyFile is used instead of GSettings, which would need an installed schema.

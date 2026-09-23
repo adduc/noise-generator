@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 John Long
+
 //! Equalizer-shaped noise. Each octave band gets its own independent white
 //! noise source, band-pass filtered and scaled by that band's gain. Because
 //! the bands are uncorrelated, their powers simply add: a slider's dB value

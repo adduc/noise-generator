@@ -147,3 +147,21 @@ cargo test
 The tests check that every preset produces the target loudness at 44.1 and
 48 kHz without clipping, and that settings and presets save and load
 correctly, including invalid values, corrupt files and rename conflicts.
+
+## License
+
+Copyright (C) 2026 John Long
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the [GNU General Public License](LICENSE) for
+more details.
+
+The dependencies keep their own licenses: the Rust crates are MIT and/or
+Apache-2.0, and the GTK and ALSA system libraries are LGPL-2.1-or-later. All
+are compatible with GPL-3.0.

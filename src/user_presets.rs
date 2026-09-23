@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 John Long
+
 //! User-saved EQ presets, stored as one INI group per preset in
 //! presets.ini next to settings.ini:
 //!

@@ -40,10 +40,7 @@ impl Settings {
         if file.load_from_file(path, KeyFileFlags::NONE).is_err() {
             return Self::default();
         }
-        let band_db = std::array::from_fn(|band| {
-            file.double(EQ_GROUP, &band_key(band))
-                .map_or(0.0, |db| (db as f32).clamp(MIN_DB, MAX_DB))
-        });
+        let band_db = read_bands(&file, EQ_GROUP);
         let volume = file
             .double(OUTPUT_GROUP, VOLUME_KEY)
             .map_or(DEFAULT_VOLUME, |v| (v as f32).clamp(0.0, 1.0));
@@ -52,26 +49,47 @@ impl Settings {
 
     fn save_to(&self, path: &Path) -> Result<(), glib::Error> {
         let file = KeyFile::new();
-        for (band, db) in self.band_db.iter().enumerate() {
-            file.set_double(EQ_GROUP, &band_key(band), *db as f64);
-        }
+        write_bands(&file, EQ_GROUP, &self.band_db);
         file.set_double(OUTPUT_GROUP, VOLUME_KEY, self.volume as f64);
-
-        if let Some(dir) = path.parent() {
-            // Surface a directory error through the save error below.
-            let _ = std::fs::create_dir_all(dir);
-        }
-        file.save_to_file(path)
+        save_key_file(&file, path)
     }
 }
 
+pub fn config_dir() -> PathBuf {
+    glib::user_config_dir().join("noise-generator")
+}
+
 fn path() -> PathBuf {
-    glib::user_config_dir().join("noise-generator").join("settings.ini")
+    config_dir().join("settings.ini")
 }
 
 /// Keys like `band_31`, `band_1k` keep the file readable and hand-editable.
 fn band_key(band: usize) -> String {
     format!("band_{}", noise::band_label(band))
+}
+
+/// Reads EQ levels from `group`. Each missing or malformed band falls back
+/// to 0 dB on its own, and out-of-range values are clamped.
+pub fn read_bands(file: &KeyFile, group: &str) -> [f32; BAND_COUNT] {
+    std::array::from_fn(|band| {
+        file.double(group, &band_key(band))
+            .map_or(0.0, |db| (db as f32).clamp(MIN_DB, MAX_DB))
+    })
+}
+
+pub fn write_bands(file: &KeyFile, group: &str, band_db: &[f32; BAND_COUNT]) {
+    for (band, db) in band_db.iter().enumerate() {
+        file.set_double(group, &band_key(band), *db as f64);
+    }
+}
+
+/// Writes `file` to `path`, creating parent directories as needed.
+pub fn save_key_file(file: &KeyFile, path: &Path) -> Result<(), glib::Error> {
+    if let Some(dir) = path.parent() {
+        // Surface a directory error through the save error below.
+        let _ = std::fs::create_dir_all(dir);
+    }
+    file.save_to_file(path)
 }
 
 #[cfg(test)]

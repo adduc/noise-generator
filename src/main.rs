@@ -1,19 +1,22 @@
 mod audio;
 mod noise;
 mod settings;
+mod user_presets;
 
 use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use gtk::prelude::*;
 use gtk::{
-    glib, Align, Application, ApplicationWindow, Box as GtkBox, Button, Label, Orientation,
-    PositionType, Scale,
+    glib, Align, Application, ApplicationWindow, Box as GtkBox, Button, Entry, Label, ListBox,
+    MenuButton, Orientation, Popover, PositionType, Scale, ScrolledWindow,
 };
 
 use audio::Controls;
 use noise::{Preset, BAND_COUNT, MAX_DB, MIN_DB};
 use settings::Settings;
+use user_presets::PresetLibrary;
 
 const APP_ID: &str = "us.jlong.NoiseGenerator";
 
@@ -91,10 +94,14 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
         .build();
     root.append(&axis_hint);
 
-    // Presets: set the sliders to a classic noise color, which you can then tweak.
+    // Presets: built-in noise colors, plus the user's own saved presets.
     let preset_row = GtkBox::builder()
         .orientation(Orientation::Horizontal)
         .halign(Align::Center)
+        .spacing(12)
+        .build();
+    let builtin_presets = GtkBox::builder()
+        .orientation(Orientation::Horizontal)
         .css_classes(["linked"])
         .build();
     for preset in Preset::ALL {
@@ -108,8 +115,10 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
                 slider.set_value(db as f64);
             }
         });
-        preset_row.append(&button);
+        builtin_presets.append(&button);
     }
+    preset_row.append(&builtin_presets);
+    preset_row.append(&PresetMenu::build(sliders.clone()));
     root.append(&preset_row);
 
     // Volume
@@ -161,4 +170,159 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
         glib::Propagation::Proceed
     });
     window.present();
+}
+
+/// The "My Presets" popover: a name entry with Save, and a list of saved
+/// presets that load on click and can be deleted.
+struct PresetMenu {
+    library: PresetLibrary,
+    sliders: Vec<Scale>,
+    popover: Popover,
+    entry: Entry,
+    save: Button,
+    list: ListBox,
+}
+
+impl PresetMenu {
+    fn build(sliders: Vec<Scale>) -> MenuButton {
+        let entry = Entry::builder().placeholder_text("Preset name").hexpand(true).build();
+        let save = Button::builder().label("Save").css_classes(["suggested-action"]).build();
+        let save_row = GtkBox::builder()
+            .orientation(Orientation::Horizontal)
+            .css_classes(["linked"])
+            .build();
+        save_row.append(&entry);
+        save_row.append(&save);
+
+        let list = ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
+        list.set_placeholder(Some(
+            &Label::builder()
+                .label("No saved presets yet")
+                .css_classes(["dim-label"])
+                .margin_top(12)
+                .margin_bottom(12)
+                .build(),
+        ));
+        let scroller = ScrolledWindow::builder()
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .max_content_height(260)
+            .propagate_natural_height(true)
+            .child(&list)
+            .build();
+
+        let content = GtkBox::builder()
+            .orientation(Orientation::Vertical)
+            .spacing(8)
+            .width_request(260)
+            .build();
+        content.append(&save_row);
+        content.append(&gtk::Separator::new(Orientation::Horizontal));
+        content.append(&scroller);
+
+        let popover = Popover::builder().child(&content).build();
+        let menu = Rc::new(PresetMenu {
+            library: PresetLibrary::open(),
+            sliders,
+            popover: popover.clone(),
+            entry: entry.clone(),
+            save: save.clone(),
+            list,
+        });
+
+        // These closures and the widgets form an Rc cycle, which is fine:
+        // the menu should live exactly as long as the window does.
+        let m = menu.clone();
+        save.connect_clicked(move |_| m.save_current());
+        let m = menu.clone();
+        entry.connect_activate(move |_| m.save_current());
+        let m = menu.clone();
+        entry.connect_changed(move |_| m.update_save_button());
+        {
+            let entry = entry.clone();
+            popover.connect_show(move |_| {
+                entry.grab_focus();
+            });
+        }
+        menu.refresh();
+
+        MenuButton::builder()
+            .label("My Presets")
+            .popover(&popover)
+            .tooltip_text("Save the current EQ as a preset, or load one")
+            .build()
+    }
+
+    fn name(&self) -> String {
+        self.entry.text().trim().to_string()
+    }
+
+    fn update_save_button(&self) {
+        let name = self.name();
+        self.save.set_sensitive(user_presets::is_valid_name(&name));
+        self.save.set_label(if self.library.get(&name).is_some() { "Overwrite" } else { "Save" });
+    }
+
+    fn save_current(self: &Rc<Self>) {
+        let name = self.name();
+        if !user_presets::is_valid_name(&name) {
+            return;
+        }
+        let band_db = std::array::from_fn(|band| self.sliders[band].value() as f32);
+        if let Err(err) = self.library.save(&name, &band_db) {
+            eprintln!("failed to save preset {name:?}: {err}");
+        }
+        self.refresh();
+    }
+
+    fn load(&self, name: &str) {
+        if let Some(band_db) = self.library.get(name) {
+            for (slider, db) in self.sliders.iter().zip(band_db) {
+                slider.set_value(db as f64);
+            }
+            // Prefill the name so tweaking and saving again overwrites it.
+            self.entry.set_text(name);
+            self.popover.popdown();
+        }
+    }
+
+    fn delete(self: &Rc<Self>, name: &str) {
+        if let Err(err) = self.library.delete(name) {
+            eprintln!("failed to delete preset {name:?}: {err}");
+        }
+        self.refresh();
+    }
+
+    fn refresh(self: &Rc<Self>) {
+        self.list.remove_all();
+        for name in self.library.names() {
+            let load = Button::builder()
+                .child(
+                    &Label::builder()
+                        .label(&name)
+                        .xalign(0.0)
+                        .ellipsize(gtk::pango::EllipsizeMode::End)
+                        .build(),
+                )
+                .hexpand(true)
+                .css_classes(["flat"])
+                .build();
+            let delete = Button::builder()
+                .icon_name("user-trash-symbolic")
+                .tooltip_text("Delete preset")
+                .css_classes(["flat"])
+                .build();
+
+            // Rows are rebuilt on every refresh, dropping these closures.
+            let (m, n) = (self.clone(), name.clone());
+            load.connect_clicked(move |_| m.load(&n));
+            let m = self.clone();
+            delete.connect_clicked(move |_| m.delete(&name));
+
+            let row = GtkBox::builder().orientation(Orientation::Horizontal).build();
+            row.append(&load);
+            row.append(&delete);
+            self.list.append(&row);
+        }
+        self.update_save_button();
+    }
 }

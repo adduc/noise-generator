@@ -62,6 +62,43 @@ impl PresetLibrary {
         self.file.remove_group(name)?;
         settings::save_key_file(&self.file, &self.path)
     }
+
+    /// Renames a preset, refusing to clobber an existing one. Renaming to the
+    /// same name is a no-op; a change in case only ("rain" → "Rain") is allowed.
+    pub fn rename(&self, old: &str, new: &str) -> Result<(), RenameError> {
+        if !is_valid_name(new) {
+            return Err(RenameError::InvalidName);
+        }
+        if old == new {
+            return Ok(());
+        }
+        let band_db = self.get(old).ok_or(RenameError::NotFound)?;
+        if self.file.has_group(new) {
+            return Err(RenameError::AlreadyExists);
+        }
+        settings::write_bands(&self.file, new, &band_db);
+        self.file.remove_group(old).map_err(RenameError::Io)?;
+        settings::save_key_file(&self.file, &self.path).map_err(RenameError::Io)
+    }
+}
+
+#[derive(Debug)]
+pub enum RenameError {
+    InvalidName,
+    NotFound,
+    AlreadyExists,
+    Io(glib::Error),
+}
+
+impl std::fmt::Display for RenameError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RenameError::InvalidName => f.write_str("Names can't be empty or contain [ or ]"),
+            RenameError::NotFound => f.write_str("That preset no longer exists"),
+            RenameError::AlreadyExists => f.write_str("A preset with that name already exists"),
+            RenameError::Io(err) => write!(f, "Couldn't save presets: {err}"),
+        }
+    }
 }
 
 /// INI group names can't contain brackets or control characters, and
@@ -120,6 +157,29 @@ mod tests {
         let backup = std::fs::read_to_string(dir.join("presets.ini.bak")).unwrap();
         assert_eq!(backup, "this is not an ini file\n");
         assert_eq!(PresetLibrary::open_at(path).names(), ["New"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rename_moves_bands_and_refuses_to_clobber() {
+        let dir = temp_dir("presets_rename");
+        let path = dir.join("presets.ini");
+        let rain: [f32; BAND_COUNT] = std::array::from_fn(|i| i as f32);
+        let library = PresetLibrary::open_at(path.clone());
+        library.save("rain", &rain).unwrap();
+        library.save("Wind", &[-3.0; BAND_COUNT]).unwrap();
+
+        assert!(matches!(library.rename("rain", "Wind"), Err(RenameError::AlreadyExists)));
+        assert!(matches!(library.rename("rain", "a[b]"), Err(RenameError::InvalidName)));
+        assert!(matches!(library.rename("gone", "New"), Err(RenameError::NotFound)));
+        library.rename("rain", "rain").unwrap(); // no-op
+        library.rename("rain", "Rain").unwrap(); // case-only change
+
+        let library = PresetLibrary::open_at(path.clone());
+        assert_eq!(library.names(), ["Rain", "Wind"]);
+        assert_eq!(library.get("Rain"), Some(rain));
+        assert_eq!(library.get("rain"), None);
+        assert_eq!(library.get("Wind"), Some([-3.0; BAND_COUNT])); // untouched
         let _ = std::fs::remove_dir_all(&dir);
     }
 

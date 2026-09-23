@@ -3,7 +3,7 @@ mod noise;
 mod settings;
 mod user_presets;
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -181,6 +181,8 @@ struct PresetMenu {
     entry: Entry,
     save: Button,
     list: ListBox,
+    /// The preset whose row is currently being renamed, if any.
+    editing: RefCell<Option<String>>,
 }
 
 impl PresetMenu {
@@ -227,6 +229,7 @@ impl PresetMenu {
             entry: entry.clone(),
             save: save.clone(),
             list,
+            editing: RefCell::new(None),
         });
 
         // These closures and the widgets form an Rc cycle, which is fine:
@@ -237,12 +240,13 @@ impl PresetMenu {
         entry.connect_activate(move |_| m.save_current());
         let m = menu.clone();
         entry.connect_changed(move |_| m.update_save_button());
-        {
-            let entry = entry.clone();
-            popover.connect_show(move |_| {
-                entry.grab_focus();
-            });
-        }
+        let m = menu.clone();
+        popover.connect_show(move |_| {
+            // Drop any rename left half-finished when the popover last closed.
+            m.editing.replace(None);
+            m.refresh();
+            m.entry.grab_focus();
+        });
         menu.refresh();
 
         MenuButton::builder()
@@ -292,37 +296,134 @@ impl PresetMenu {
         self.refresh();
     }
 
+    fn start_rename(self: &Rc<Self>, name: &str) {
+        self.editing.replace(Some(name.to_string()));
+        self.refresh();
+    }
+
+    fn cancel_rename(self: &Rc<Self>) {
+        self.editing.replace(None);
+        self.refresh();
+    }
+
+    fn commit_rename(self: &Rc<Self>, old: &str, field: &Entry, error: &Label) {
+        let new = field.text().trim().to_string();
+        match self.library.rename(old, &new) {
+            Ok(()) => {
+                // Keep the save field pointing at the preset under its new name.
+                if self.name() == old {
+                    self.entry.set_text(&new);
+                }
+                self.cancel_rename();
+            }
+            Err(err) => {
+                field.add_css_class("error");
+                error.set_label(&err.to_string());
+                error.set_visible(true);
+            }
+        }
+    }
+
     fn refresh(self: &Rc<Self>) {
         self.list.remove_all();
+        let editing = self.editing.borrow().clone();
         for name in self.library.names() {
-            let load = Button::builder()
-                .child(
-                    &Label::builder()
-                        .label(&name)
-                        .xalign(0.0)
-                        .ellipsize(gtk::pango::EllipsizeMode::End)
-                        .build(),
-                )
-                .hexpand(true)
-                .css_classes(["flat"])
-                .build();
-            let delete = Button::builder()
-                .icon_name("user-trash-symbolic")
-                .tooltip_text("Delete preset")
-                .css_classes(["flat"])
-                .build();
-
-            // Rows are rebuilt on every refresh, dropping these closures.
-            let (m, n) = (self.clone(), name.clone());
-            load.connect_clicked(move |_| m.load(&n));
-            let m = self.clone();
-            delete.connect_clicked(move |_| m.delete(&name));
-
-            let row = GtkBox::builder().orientation(Orientation::Horizontal).build();
-            row.append(&load);
-            row.append(&delete);
-            self.list.append(&row);
+            if editing.as_deref() == Some(name.as_str()) {
+                self.append_rename_row(name);
+            } else {
+                self.append_preset_row(name);
+            }
         }
         self.update_save_button();
+    }
+
+    fn append_preset_row(self: &Rc<Self>, name: String) {
+        let load = Button::builder()
+            .child(
+                &Label::builder()
+                    .label(&name)
+                    .xalign(0.0)
+                    .ellipsize(gtk::pango::EllipsizeMode::End)
+                    .build(),
+            )
+            .hexpand(true)
+            .css_classes(["flat"])
+            .build();
+        let rename = Button::builder()
+            .icon_name("document-edit-symbolic")
+            .tooltip_text("Rename preset")
+            .css_classes(["flat"])
+            .build();
+        let delete = Button::builder()
+            .icon_name("user-trash-symbolic")
+            .tooltip_text("Delete preset")
+            .css_classes(["flat"])
+            .build();
+
+        // Rows are rebuilt on every refresh, dropping these closures.
+        let (m, n) = (self.clone(), name.clone());
+        load.connect_clicked(move |_| m.load(&n));
+        let (m, n) = (self.clone(), name.clone());
+        rename.connect_clicked(move |_| m.start_rename(&n));
+        let m = self.clone();
+        delete.connect_clicked(move |_| m.delete(&name));
+
+        let row = GtkBox::builder().orientation(Orientation::Horizontal).build();
+        row.append(&load);
+        row.append(&rename);
+        row.append(&delete);
+        self.list.append(&row);
+    }
+
+    /// Inline editor: [name field][✓][✗], with an error line shown on failure.
+    fn append_rename_row(self: &Rc<Self>, name: String) {
+        let field = Entry::builder().text(&name).hexpand(true).build();
+        let confirm = Button::builder()
+            .icon_name("object-select-symbolic")
+            .tooltip_text("Rename")
+            .build();
+        let cancel = Button::builder()
+            .icon_name("window-close-symbolic")
+            .tooltip_text("Cancel")
+            .build();
+        let error = Label::builder()
+            .xalign(0.0)
+            .wrap(true)
+            .visible(false)
+            .css_classes(["error", "caption"])
+            .build();
+
+        let m = self.clone();
+        let (n, f, e) = (name.clone(), field.clone(), error.clone());
+        confirm.connect_clicked(move |_| m.commit_rename(&n, &f, &e));
+        let m = self.clone();
+        let e = error.clone();
+        field.connect_activate(move |f| m.commit_rename(&name, f, &e));
+        let e = error.clone();
+        field.connect_changed(move |f| {
+            f.remove_css_class("error");
+            e.set_visible(false);
+        });
+        let m = self.clone();
+        cancel.connect_clicked(move |_| m.cancel_rename());
+
+        let controls = GtkBox::builder()
+            .orientation(Orientation::Horizontal)
+            .css_classes(["linked"])
+            .build();
+        controls.append(&field);
+        controls.append(&confirm);
+        controls.append(&cancel);
+        let row = GtkBox::builder()
+            .orientation(Orientation::Vertical)
+            .spacing(4)
+            .margin_top(2)
+            .margin_bottom(2)
+            .build();
+        row.append(&controls);
+        row.append(&error);
+        self.list.append(&row);
+        // GTK selects an entry's text when it takes focus, so typing replaces it.
+        field.grab_focus();
     }
 }

@@ -5,10 +5,13 @@ use std::cell::Cell;
 use std::sync::Arc;
 
 use gtk::prelude::*;
-use gtk::{glib, Align, Application, ApplicationWindow, Box as GtkBox, Button, Label, Orientation, Scale, ToggleButton};
+use gtk::{
+    glib, Align, Application, ApplicationWindow, Box as GtkBox, Button, Label, Orientation,
+    PositionType, Scale,
+};
 
 use audio::Controls;
-use noise::NoiseColor;
+use noise::{Preset, BAND_COUNT, MAX_DB, MIN_DB};
 
 const APP_ID: &str = "us.jlong.NoiseGenerator";
 
@@ -43,43 +46,62 @@ fn build_ui(app: &Application, controls: Arc<Controls>) {
     let title = Label::builder().label("Noise Generator").css_classes(["title-1"]).build();
     root.append(&title);
 
-    // Color selector: a row of linked toggle buttons acting as radio buttons.
-    let color_row = GtkBox::builder()
+    // Equalizer: one vertical slider per octave band.
+    let eq_row = GtkBox::builder()
+        .orientation(Orientation::Horizontal)
+        .spacing(6)
+        .homogeneous(true)
+        .build();
+    let sliders: Vec<Scale> = (0..BAND_COUNT)
+        .map(|band| {
+            let scale = Scale::with_range(Orientation::Vertical, MIN_DB as f64, MAX_DB as f64, 1.0);
+            // Vertical scales put the minimum at the top by default.
+            scale.set_inverted(true);
+            scale.set_value(0.0);
+            scale.set_digits(0);
+            scale.set_draw_value(true);
+            scale.set_value_pos(PositionType::Top);
+            scale.set_height_request(220);
+            scale.add_mark(0.0, PositionType::Right, None);
+            let controls = controls.clone();
+            scale.connect_value_changed(move |s| controls.set_band_db(band, s.value() as f32));
+
+            let column = GtkBox::builder().orientation(Orientation::Vertical).spacing(4).build();
+            column.append(&scale);
+            column.append(&Label::builder().label(noise::band_label(band)).css_classes(["caption"]).build());
+            eq_row.append(&column);
+            scale
+        })
+        .collect();
+    root.append(&eq_row);
+
+    let axis_hint = Label::builder()
+        .label("Band levels in dB (Hz below). Levels are relative; loudness is set by Volume.")
+        .wrap(true)
+        .css_classes(["dim-label", "caption"])
+        .build();
+    root.append(&axis_hint);
+
+    // Presets: set the sliders to a classic noise color, which you can then tweak.
+    let preset_row = GtkBox::builder()
         .orientation(Orientation::Horizontal)
         .halign(Align::Center)
         .css_classes(["linked"])
         .build();
-
-    let description = Label::builder()
-        .label(NoiseColor::White.description())
-        .wrap(true)
-        .justify(gtk::Justification::Center)
-        .width_chars(40)
-        .max_width_chars(40)
-        .css_classes(["dim-label"])
-        .build();
-
-    let mut first: Option<ToggleButton> = None;
-    for color in NoiseColor::ALL {
-        let button = ToggleButton::with_label(color.label());
-        if let Some(first) = &first {
-            button.set_group(Some(first));
-        } else {
-            button.set_active(true);
-            first = Some(button.clone());
-        }
-        let controls = controls.clone();
-        let description = description.clone();
-        button.connect_toggled(move |b| {
-            if b.is_active() {
-                controls.set_color(color);
-                description.set_label(color.description());
+    for preset in Preset::ALL {
+        let button = Button::builder()
+            .label(preset.label())
+            .tooltip_text(preset.description())
+            .build();
+        let sliders = sliders.clone();
+        button.connect_clicked(move |_| {
+            for (slider, db) in sliders.iter().zip(preset.band_db()) {
+                slider.set_value(db as f64);
             }
         });
-        color_row.append(&button);
+        preset_row.append(&button);
     }
-    root.append(&color_row);
-    root.append(&description);
+    root.append(&preset_row);
 
     // Volume
     let volume_row = GtkBox::builder().orientation(Orientation::Horizontal).spacing(12).build();

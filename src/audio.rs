@@ -3,17 +3,18 @@
 
 use std::error::Error;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample, Stream, StreamConfig};
 
-use crate::noise::{NoiseColor, NoiseGenerator};
+use crate::noise::{self, BAND_COUNT, NoiseGenerator};
 
 /// Controls shared between the UI and the audio callback.
 pub struct Controls {
-    color: AtomicU8,
-    /// f32 volume stored as raw bits, since there is no AtomicF32.
+    /// Per-band EQ levels in dB. f32s are stored as raw bits, since there
+    /// is no AtomicF32.
+    band_db: [AtomicU32; BAND_COUNT],
     volume: AtomicU32,
     playing: AtomicBool,
 }
@@ -21,14 +22,14 @@ pub struct Controls {
 impl Controls {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
-            color: AtomicU8::new(NoiseColor::White as u8),
+            band_db: std::array::from_fn(|_| AtomicU32::new(0f32.to_bits())),
             volume: AtomicU32::new(0.5f32.to_bits()),
             playing: AtomicBool::new(false),
         })
     }
 
-    pub fn set_color(&self, color: NoiseColor) {
-        self.color.store(color as u8, Ordering::Relaxed);
+    pub fn set_band_db(&self, band: usize, db: f32) {
+        self.band_db[band].store(db.to_bits(), Ordering::Relaxed);
     }
 
     pub fn set_volume(&self, volume: f32) {
@@ -39,8 +40,8 @@ impl Controls {
         self.playing.store(playing, Ordering::Relaxed);
     }
 
-    fn color(&self) -> NoiseColor {
-        NoiseColor::from_u8(self.color.load(Ordering::Relaxed))
+    fn band_db(&self) -> [f32; BAND_COUNT] {
+        std::array::from_fn(|i| f32::from_bits(self.band_db[i].load(Ordering::Relaxed)))
     }
 
     fn volume(&self) -> f32 {
@@ -90,38 +91,38 @@ where
     // One generator per channel with different seeds: uncorrelated left/right
     // noise sounds wide and enveloping instead of sitting in the middle.
     let mut generators: Vec<NoiseGenerator> = (0..channels)
-        .map(|ch| NoiseGenerator::new(0x9E37_79B9u32.wrapping_mul(ch as u32 + 1)))
+        .map(|ch| NoiseGenerator::new(0x9E37_79B9u32.wrapping_mul(ch as u32 + 1), sample_rate))
         .collect();
 
-    // Gain is smoothed toward its target with a one-pole filter (~20 ms time
-    // constant) so volume changes, play/pause and color switches don't click.
+    // Gains are smoothed toward their targets with a one-pole filter (~20 ms
+    // time constant) so slider moves and play/pause don't click or "zipper".
     let smoothing = 1.0 - (-1.0 / (0.02 * sample_rate)).exp();
-    let mut gain = 0.0f32;
-    let mut active_color = controls.color();
+    let mut master = 0.0f32;
+    let mut band_db = controls.band_db();
+    let mut band_targets = noise::band_gains(&band_db, sample_rate);
+    let mut band_gains = band_targets;
 
     let stream = device.build_output_stream(
         config,
         move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-            let wanted_color = controls.color();
+            // Recompute band gains only when a slider actually moved.
+            let wanted_db = controls.band_db();
+            if wanted_db != band_db {
+                band_db = wanted_db;
+                band_targets = noise::band_gains(&band_db, sample_rate);
+            }
             let volume = controls.volume();
-            let playing = controls.playing();
+            // Squared for a more natural-feeling volume slider.
+            let master_target = if controls.playing() { volume * volume } else { 0.0 };
 
             for frame in data.chunks_mut(channels) {
-                // On a color change, fade out, swap once silent, then fade back in.
-                let switching = wanted_color != active_color;
-                if switching && gain < 1e-3 {
-                    active_color = wanted_color;
+                master += (master_target - master) * smoothing;
+                for (gain, target) in band_gains.iter_mut().zip(&band_targets) {
+                    *gain += (target - *gain) * smoothing;
                 }
-                let target = if playing && !switching {
-                    // Squared for a more natural-feeling volume slider.
-                    volume * volume
-                } else {
-                    0.0
-                };
-                gain += (target - gain) * smoothing;
 
                 for (sample, generator) in frame.iter_mut().zip(generators.iter_mut()) {
-                    let value = generator.next(active_color) * gain;
+                    let value = generator.next(&band_gains) * master;
                     *sample = T::from_sample(value.clamp(-1.0, 1.0));
                 }
             }

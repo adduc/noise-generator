@@ -1,9 +1,11 @@
 mod audio;
+mod mpris;
 mod noise;
+mod player;
 mod settings;
 mod user_presets;
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -15,6 +17,7 @@ use gtk::{
 
 use audio::Controls;
 use noise::{Preset, BAND_COUNT, MAX_DB, MIN_DB};
+use player::{Player, PresetRef};
 use settings::Settings;
 use user_presets::PresetLibrary;
 
@@ -41,11 +44,51 @@ fn main() -> glib::ExitCode {
     };
 
     let app = Application::builder().application_id(APP_ID).build();
-    app.connect_activate(move |app| build_ui(app, controls.clone(), &settings));
+    app.connect_activate(move |app| {
+        // Launching again activates the running instance: show its window
+        // rather than building a second one.
+        match app.active_window() {
+            Some(window) => window.present(),
+            None => build_ui(app, controls.clone(), &settings),
+        }
+    });
     app.run()
 }
 
 fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
+    // Controls first: the Player wires them up, and the layout below needs it.
+    let sliders: Vec<Scale> = (0..BAND_COUNT)
+        .map(|band| {
+            let scale = Scale::with_range(Orientation::Vertical, MIN_DB as f64, MAX_DB as f64, 1.0);
+            // Vertical scales put the minimum at the top by default.
+            scale.set_inverted(true);
+            scale.set_value(settings.band_db[band] as f64);
+            scale.set_digits(0);
+            scale.set_draw_value(true);
+            scale.set_value_pos(PositionType::Top);
+            scale.set_height_request(220);
+            scale.add_mark(0.0, PositionType::Right, None);
+            scale
+        })
+        .collect();
+    let volume = Scale::with_range(Orientation::Horizontal, 0.0, 1.0, 0.01);
+    volume.set_value(settings.volume as f64);
+    volume.set_hexpand(true);
+    volume.set_draw_value(false);
+    let play = Button::builder()
+        .label("Play")
+        .halign(Align::Center)
+        .width_request(140)
+        .css_classes(["suggested-action", "pill"])
+        .build();
+    let player = Player::new(
+        controls,
+        Rc::new(PresetLibrary::open()),
+        sliders.clone(),
+        volume.clone(),
+        play.clone(),
+    );
+
     let root = GtkBox::builder()
         .orientation(Orientation::Vertical)
         .spacing(18)
@@ -64,27 +107,12 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
         .spacing(6)
         .homogeneous(true)
         .build();
-    let sliders: Vec<Scale> = (0..BAND_COUNT)
-        .map(|band| {
-            let scale = Scale::with_range(Orientation::Vertical, MIN_DB as f64, MAX_DB as f64, 1.0);
-            // Vertical scales put the minimum at the top by default.
-            scale.set_inverted(true);
-            scale.set_value(settings.band_db[band] as f64);
-            scale.set_digits(0);
-            scale.set_draw_value(true);
-            scale.set_value_pos(PositionType::Top);
-            scale.set_height_request(220);
-            scale.add_mark(0.0, PositionType::Right, None);
-            let controls = controls.clone();
-            scale.connect_value_changed(move |s| controls.set_band_db(band, s.value() as f32));
-
-            let column = GtkBox::builder().orientation(Orientation::Vertical).spacing(4).build();
-            column.append(&scale);
-            column.append(&Label::builder().label(noise::band_label(band)).css_classes(["caption"]).build());
-            eq_row.append(&column);
-            scale
-        })
-        .collect();
+    for (band, scale) in sliders.iter().enumerate() {
+        let column = GtkBox::builder().orientation(Orientation::Vertical).spacing(4).build();
+        column.append(scale);
+        column.append(&Label::builder().label(noise::band_label(band)).css_classes(["caption"]).build());
+        eq_row.append(&column);
+    }
     root.append(&eq_row);
 
     let axis_hint = Label::builder()
@@ -109,48 +137,20 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
             .label(preset.label())
             .tooltip_text(preset.description())
             .build();
-        let sliders = sliders.clone();
+        let player = player.clone();
         button.connect_clicked(move |_| {
-            for (slider, db) in sliders.iter().zip(preset.band_db()) {
-                slider.set_value(db as f64);
-            }
+            player.apply(PresetRef::Builtin(preset));
         });
         builtin_presets.append(&button);
     }
     preset_row.append(&builtin_presets);
-    preset_row.append(&PresetMenu::build(sliders.clone()));
+    preset_row.append(&PresetMenu::build(player.clone()));
     root.append(&preset_row);
 
-    // Volume
     let volume_row = GtkBox::builder().orientation(Orientation::Horizontal).spacing(12).build();
     volume_row.append(&Label::new(Some("Volume")));
-    let volume = Scale::with_range(Orientation::Horizontal, 0.0, 1.0, 0.01);
-    volume.set_value(settings.volume as f64);
-    volume.set_hexpand(true);
-    volume.set_draw_value(false);
-    {
-        let controls = controls.clone();
-        volume.connect_value_changed(move |s| controls.set_volume(s.value() as f32));
-    }
     volume_row.append(&volume);
     root.append(&volume_row);
-
-    // Play / pause
-    let play = Button::builder()
-        .label("Play")
-        .halign(Align::Center)
-        .width_request(140)
-        .css_classes(["suggested-action", "pill"])
-        .build();
-    {
-        let controls = controls.clone();
-        let playing = Cell::new(false);
-        play.connect_clicked(move |b| {
-            let playing = !playing.replace(!playing.get());
-            controls.set_playing(playing);
-            b.set_label(if playing { "Pause" } else { "Play" });
-        });
-    }
     root.append(&play);
 
     let window = ApplicationWindow::builder()
@@ -159,24 +159,28 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
         .resizable(false)
         .child(&root)
         .build();
-    window.connect_close_request(move |_| {
-        let settings = Settings {
-            band_db: std::array::from_fn(|band| sliders[band].value() as f32),
-            volume: volume.value() as f32,
-        };
-        if let Err(err) = settings.save() {
-            eprintln!("failed to save settings: {err}");
-        }
-        glib::Propagation::Proceed
-    });
+    {
+        let player = player.clone();
+        window.connect_close_request(move |_| {
+            let settings = Settings {
+                band_db: player.band_db(),
+                volume: player.volume() as f32,
+            };
+            if let Err(err) = settings.save() {
+                eprintln!("failed to save settings: {err}");
+            }
+            glib::Propagation::Proceed
+        });
+    }
+    // Media keys and shell media controls. The name is released at exit.
+    mpris::start(&window, player);
     window.present();
 }
 
 /// The "My Presets" popover: a name entry with Save, and a list of saved
 /// presets that load on click and can be deleted.
 struct PresetMenu {
-    library: PresetLibrary,
-    sliders: Vec<Scale>,
+    player: Rc<Player>,
     popover: Popover,
     entry: Entry,
     save: Button,
@@ -186,7 +190,7 @@ struct PresetMenu {
 }
 
 impl PresetMenu {
-    fn build(sliders: Vec<Scale>) -> MenuButton {
+    fn build(player: Rc<Player>) -> MenuButton {
         let entry = Entry::builder().placeholder_text("Preset name").hexpand(true).build();
         let save = Button::builder().label("Save").css_classes(["suggested-action"]).build();
         let save_row = GtkBox::builder()
@@ -223,8 +227,7 @@ impl PresetMenu {
 
         let popover = Popover::builder().child(&content).build();
         let menu = Rc::new(PresetMenu {
-            library: PresetLibrary::open(),
-            sliders,
+            player,
             popover: popover.clone(),
             entry: entry.clone(),
             save: save.clone(),
@@ -263,7 +266,7 @@ impl PresetMenu {
     fn update_save_button(&self) {
         let name = self.name();
         self.save.set_sensitive(user_presets::is_valid_name(&name));
-        self.save.set_label(if self.library.get(&name).is_some() { "Overwrite" } else { "Save" });
+        self.save.set_label(if self.player.library().get(&name).is_some() { "Overwrite" } else { "Save" });
     }
 
     fn save_current(self: &Rc<Self>) {
@@ -271,18 +274,15 @@ impl PresetMenu {
         if !user_presets::is_valid_name(&name) {
             return;
         }
-        let band_db = std::array::from_fn(|band| self.sliders[band].value() as f32);
-        if let Err(err) = self.library.save(&name, &band_db) {
-            eprintln!("failed to save preset {name:?}: {err}");
+        match self.player.library().save(&name, &self.player.band_db()) {
+            Ok(()) => self.player.mark_current(Some(PresetRef::User(name))),
+            Err(err) => eprintln!("failed to save preset {name:?}: {err}"),
         }
         self.refresh();
     }
 
     fn load(&self, name: &str) {
-        if let Some(band_db) = self.library.get(name) {
-            for (slider, db) in self.sliders.iter().zip(band_db) {
-                slider.set_value(db as f64);
-            }
+        if self.player.apply(PresetRef::User(name.to_string())) {
             // Prefill the name so tweaking and saving again overwrites it.
             self.entry.set_text(name);
             self.popover.popdown();
@@ -290,8 +290,9 @@ impl PresetMenu {
     }
 
     fn delete(self: &Rc<Self>, name: &str) {
-        if let Err(err) = self.library.delete(name) {
-            eprintln!("failed to delete preset {name:?}: {err}");
+        match self.player.library().delete(name) {
+            Ok(()) => self.player.preset_deleted(name),
+            Err(err) => eprintln!("failed to delete preset {name:?}: {err}"),
         }
         self.refresh();
     }
@@ -308,8 +309,9 @@ impl PresetMenu {
 
     fn commit_rename(self: &Rc<Self>, old: &str, field: &Entry, error: &Label) {
         let new = field.text().trim().to_string();
-        match self.library.rename(old, &new) {
+        match self.player.library().rename(old, &new) {
             Ok(()) => {
+                self.player.preset_renamed(old, &new);
                 // Keep the save field pointing at the preset under its new name.
                 if self.name() == old {
                     self.entry.set_text(&new);
@@ -327,7 +329,7 @@ impl PresetMenu {
     fn refresh(self: &Rc<Self>) {
         self.list.remove_all();
         let editing = self.editing.borrow().clone();
-        for name in self.library.names() {
+        for name in self.player.library().names() {
             if editing.as_deref() == Some(name.as_str()) {
                 self.append_rename_row(name);
             } else {

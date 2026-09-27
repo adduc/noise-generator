@@ -132,14 +132,22 @@ impl Player {
         }
     }
 
+    pub fn current(&self) -> Option<PresetRef> {
+        self.current.borrow().clone()
+    }
+
+    /// A preset's levels, or None if it's a user preset that no longer exists.
+    fn preset_band_db(&self, preset: &PresetRef) -> Option<[f32; BAND_COUNT]> {
+        match preset {
+            PresetRef::Builtin(p) => Some(p.band_db()),
+            PresetRef::User(name) => self.library.get(name),
+        }
+    }
+
     /// Sets the sliders to a preset. Returns false if a user preset is gone.
     pub fn apply(&self, preset: PresetRef) -> bool {
-        let band_db = match &preset {
-            PresetRef::Builtin(p) => p.band_db(),
-            PresetRef::User(name) => match self.library.get(name) {
-                Some(band_db) => band_db,
-                None => return false,
-            },
+        let Some(band_db) = self.preset_band_db(&preset) else {
+            return false;
         };
         self.applying.set(true);
         for (slider, db) in self.sliders.iter().zip(band_db) {
@@ -156,6 +164,18 @@ impl Player {
         if *self.current.borrow() != preset {
             self.current.replace(preset);
             self.notify();
+        }
+    }
+
+    /// Marks a preset remembered from the last run as current, but only if
+    /// it still exists and the sliders still match it: it may have been
+    /// edited or deleted while the app was closed.
+    pub fn restore_current(&self, preset: PresetRef) {
+        let matches = self
+            .preset_band_db(&preset)
+            .is_some_and(|band_db| band_db == self.band_db());
+        if matches {
+            self.mark_current(Some(preset));
         }
     }
 

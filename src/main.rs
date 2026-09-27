@@ -73,7 +73,9 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
             scale.set_digits(0);
             scale.set_draw_value(true);
             scale.set_value_pos(PositionType::Top);
+            // A minimum height; the sliders grow when the window is enlarged.
             scale.set_height_request(220);
+            scale.set_vexpand(true);
             scale.add_mark(0.0, PositionType::Right, None);
             scale
         })
@@ -163,7 +165,6 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
     let window = ApplicationWindow::builder()
         .application(app)
         .title("Noise Generator")
-        .resizable(false)
         .child(&root)
         .build();
     {

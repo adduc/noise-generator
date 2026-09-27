@@ -23,10 +23,11 @@ pub struct Controls {
 }
 
 impl Controls {
-    pub fn new() -> Arc<Self> {
+    /// Starts paused, with the given EQ and volume.
+    pub fn new(band_db: &[f32; BAND_COUNT], volume: f32) -> Arc<Self> {
         Arc::new(Self {
-            band_db: std::array::from_fn(|_| AtomicU32::new(0f32.to_bits())),
-            volume: AtomicU32::new(0.5f32.to_bits()),
+            band_db: band_db.map(|db| AtomicU32::new(db.to_bits())),
+            volume: AtomicU32::new(volume.clamp(0.0, 1.0).to_bits()),
             playing: AtomicBool::new(false),
         })
     }
@@ -102,8 +103,9 @@ where
     // time constant) so slider moves and play/pause don't click or "zipper".
     let smoothing = 1.0 - (-1.0 / (0.02 * sample_rate)).exp();
     let mut master = 0.0f32;
+    let band_variances = noise::band_variances(sample_rate);
     let mut band_db = controls.band_db();
-    let mut band_targets = noise::band_gains(&band_db, sample_rate);
+    let mut band_targets = noise::band_gains(&band_db, &band_variances);
     let mut band_gains = band_targets;
 
     let stream = device.build_output_stream(
@@ -113,7 +115,7 @@ where
             let wanted_db = controls.band_db();
             if wanted_db != band_db {
                 band_db = wanted_db;
-                band_targets = noise::band_gains(&band_db, sample_rate);
+                band_targets = noise::band_gains(&band_db, &band_variances);
             }
             let volume = controls.volume();
             // Squared for a more natural-feeling volume slider.

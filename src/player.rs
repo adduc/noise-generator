@@ -180,14 +180,18 @@ impl Player {
         }
     }
 
+    fn is_current_user_preset(&self, name: &str) -> bool {
+        matches!(&*self.current.borrow(), Some(PresetRef::User(n)) if n == name)
+    }
+
     pub fn preset_renamed(&self, old: &str, new: &str) {
-        if *self.current.borrow() == Some(PresetRef::User(old.to_string())) {
+        if self.is_current_user_preset(old) {
             self.mark_current(Some(PresetRef::User(new.to_string())));
         }
     }
 
     pub fn preset_deleted(&self, name: &str) {
-        if *self.current.borrow() == Some(PresetRef::User(name.to_string())) {
+        if self.is_current_user_preset(name) {
             self.mark_current(None);
         }
     }

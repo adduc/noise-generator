@@ -105,10 +105,7 @@ impl Settings {
 /// whether a user preset still exists is up to the caller.
 fn read_preset(file: &KeyFile) -> Option<PresetRef> {
     if let Ok(label) = file.string(EQ_GROUP, BUILTIN_PRESET_KEY) {
-        return Preset::ALL
-            .into_iter()
-            .find(|p| p.label() == label)
-            .map(PresetRef::Builtin);
+        return Preset::from_label(&label).map(PresetRef::Builtin);
     }
     let name = file.string(EQ_GROUP, USER_PRESET_KEY).ok()?;
     Some(PresetRef::User(name.to_string()))

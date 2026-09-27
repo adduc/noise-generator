@@ -27,14 +27,9 @@ use user_presets::PresetLibrary;
 const APP_ID: &str = "us.jlong.NoiseGenerator";
 
 fn main() -> glib::ExitCode {
-    let controls = Controls::new();
-
     // Apply saved settings before audio starts, so the first sound is already right.
     let settings = Settings::load();
-    for (band, db) in settings.band_db.iter().enumerate() {
-        controls.set_band_db(band, *db);
-    }
-    controls.set_volume(settings.volume);
+    let controls = Controls::new(&settings.band_db, settings.volume);
 
     // The stream must stay alive for the whole program, so it lives here in
     // main (cpal streams are not Send, so it can't move into GTK callbacks freely).
@@ -291,8 +286,7 @@ impl PresetMenu {
         let m = menu.clone();
         popover.connect_show(move |_| {
             // Drop any rename left half-finished when the popover last closed.
-            m.editing.replace(None);
-            m.refresh();
+            m.set_editing(None);
             m.entry.grab_focus();
         });
         menu.refresh();
@@ -347,13 +341,9 @@ impl PresetMenu {
         self.refresh();
     }
 
-    fn start_rename(self: &Rc<Self>, name: &str) {
-        self.editing.replace(Some(name.to_string()));
-        self.refresh();
-    }
-
-    fn cancel_rename(self: &Rc<Self>) {
-        self.editing.replace(None);
+    /// Shows the inline rename editor on `name`'s row, or on none.
+    fn set_editing(self: &Rc<Self>, name: Option<&str>) {
+        self.editing.replace(name.map(str::to_string));
         self.refresh();
     }
 
@@ -366,7 +356,7 @@ impl PresetMenu {
                 if self.name() == old {
                     self.entry.set_text(&new);
                 }
-                self.cancel_rename();
+                self.set_editing(None);
             }
             Err(err) => {
                 field.add_css_class("error");
@@ -416,7 +406,7 @@ impl PresetMenu {
         let (m, n) = (self.clone(), name.clone());
         load.connect_clicked(move |_| m.load(&n));
         let (m, n) = (self.clone(), name.clone());
-        rename.connect_clicked(move |_| m.start_rename(&n));
+        rename.connect_clicked(move |_| m.set_editing(Some(&n)));
         let m = self.clone();
         delete.connect_clicked(move |_| m.delete(&name));
 
@@ -459,7 +449,7 @@ impl PresetMenu {
             e.set_visible(false);
         });
         let m = self.clone();
-        cancel.connect_clicked(move |_| m.cancel_rename());
+        cancel.connect_clicked(move |_| m.set_editing(None));
 
         let controls = GtkBox::builder()
             .orientation(Orientation::Horizontal)

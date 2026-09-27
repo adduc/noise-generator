@@ -88,6 +88,11 @@ impl Preset {
         }
     }
 
+    /// The preset with this label, as written to the settings file.
+    pub fn from_label(label: &str) -> Option<Preset> {
+        Preset::ALL.into_iter().find(|p| p.label() == label)
+    }
+
     pub fn band_db(self) -> [f32; BAND_COUNT] {
         let slope = self.slope_db_per_octave();
         std::array::from_fn(|i| (slope * (i as f32 - REFERENCE_BAND as f32)).clamp(MIN_DB, MAX_DB))
@@ -95,7 +100,7 @@ impl Preset {
 }
 
 /// RBJ "constant 0 dB peak gain" band-pass biquad.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 struct BandPass {
     b0: f32,
     a1: f32,
@@ -110,14 +115,7 @@ impl BandPass {
     fn new(freq: f32, q: f32, sample_rate: f32) -> Self {
         // Bands at or near Nyquist can't be represented; leave them silent.
         if freq >= 0.45 * sample_rate {
-            return Self {
-                b0: 0.0,
-                a1: 0.0,
-                a2: 0.0,
-                z1: 0.0,
-                z2: 0.0,
-                noise_gain: 0.0,
-            };
+            return Self::default();
         }
         let w0 = std::f32::consts::TAU * freq / sample_rate;
         let alpha = w0.sin() / (2.0 * q);
@@ -142,15 +140,24 @@ impl BandPass {
     }
 }
 
+/// Each band's output variance for white input, which depends only on the
+/// sample rate. Compute once and pass to [`band_gains`].
+pub fn band_variances(sample_rate: f32) -> [f32; BAND_COUNT] {
+    BAND_FREQS.map(|f| WHITE_VARIANCE * BandPass::new(f, BAND_Q, sample_rate).noise_gain)
+}
+
 /// Converts slider positions (dB) into linear per-band amplitudes, scaled so
 /// the summed output lands at `TARGET_RMS` whatever the EQ shape.
 /// Allocation-free, so it can run on the audio thread.
-pub fn band_gains(band_db: &[f32; BAND_COUNT], sample_rate: f32) -> [f32; BAND_COUNT] {
+pub fn band_gains(
+    band_db: &[f32; BAND_COUNT],
+    band_variances: &[f32; BAND_COUNT],
+) -> [f32; BAND_COUNT] {
     let mut gains: [f32; BAND_COUNT] = std::array::from_fn(|i| 10f32.powf(band_db[i] / 20.0));
     let variance: f32 = gains
         .iter()
-        .zip(BAND_FREQS)
-        .map(|(g, f)| g * g * WHITE_VARIANCE * BandPass::new(f, BAND_Q, sample_rate).noise_gain)
+        .zip(band_variances)
+        .map(|(g, v)| g * g * v)
         .sum();
     if variance > 0.0 {
         let scale = TARGET_RMS / variance.sqrt();
@@ -207,7 +214,7 @@ mod tests {
     fn presets_are_normalized_to_target_loudness() {
         for sample_rate in [44_100.0, 48_000.0] {
             for preset in Preset::ALL {
-                let gains = band_gains(&preset.band_db(), sample_rate);
+                let gains = band_gains(&preset.band_db(), &band_variances(sample_rate));
                 let mut g = NoiseGenerator::new(1234, sample_rate);
                 let n = 480_000;
                 let (mut sum_sq, mut peak) = (0.0f64, 0.0f32);

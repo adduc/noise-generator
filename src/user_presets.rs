@@ -34,7 +34,10 @@ impl PresetLibrary {
             // the next save, losing every preset. Move it aside instead.
             if !err.matches(glib::FileError::Noent) && path.exists() {
                 let backup = path.with_extension("ini.bak");
-                eprintln!("unreadable presets file ({err}); moving it to {}", backup.display());
+                eprintln!(
+                    "unreadable presets file ({err}); moving it to {}",
+                    backup.display()
+                );
                 let _ = std::fs::rename(&path, &backup);
             }
         }
@@ -43,8 +46,7 @@ impl PresetLibrary {
 
     /// Preset names, sorted case-insensitively.
     pub fn names(&self) -> Vec<String> {
-        let mut names: Vec<String> =
-            self.file.groups().iter().map(|g| g.to_string()).collect();
+        let mut names: Vec<String> = self.file.groups().iter().map(|g| g.to_string()).collect();
         names.sort_by_key(|n| n.to_lowercase());
         names
     }
@@ -128,12 +130,17 @@ mod tests {
 
         let library = PresetLibrary::open_at(path.clone());
         library.save("rainy Night", &bands).unwrap();
-        library.save("Airplane cabin ✈", &[3.0; BAND_COUNT]).unwrap();
+        library
+            .save("Airplane cabin ✈", &[3.0; BAND_COUNT])
+            .unwrap();
         library.save("Brownish", &[-1.0; BAND_COUNT]).unwrap();
 
         // Reopen to prove everything went through the file.
         let library = PresetLibrary::open_at(path.clone());
-        assert_eq!(library.names(), ["Airplane cabin ✈", "Brownish", "rainy Night"]);
+        assert_eq!(
+            library.names(),
+            ["Airplane cabin ✈", "Brownish", "rainy Night"]
+        );
         assert_eq!(library.get("rainy Night"), Some(bands));
         assert_eq!(library.get("missing"), None);
 
@@ -172,9 +179,18 @@ mod tests {
         library.save("rain", &rain).unwrap();
         library.save("Wind", &[-3.0; BAND_COUNT]).unwrap();
 
-        assert!(matches!(library.rename("rain", "Wind"), Err(RenameError::AlreadyExists)));
-        assert!(matches!(library.rename("rain", "a[b]"), Err(RenameError::InvalidName)));
-        assert!(matches!(library.rename("gone", "New"), Err(RenameError::NotFound)));
+        assert!(matches!(
+            library.rename("rain", "Wind"),
+            Err(RenameError::AlreadyExists)
+        ));
+        assert!(matches!(
+            library.rename("rain", "a[b]"),
+            Err(RenameError::InvalidName)
+        ));
+        assert!(matches!(
+            library.rename("gone", "New"),
+            Err(RenameError::NotFound)
+        ));
         library.rename("rain", "rain").unwrap(); // no-op
         library.rename("rain", "Rain").unwrap(); // case-only change
 

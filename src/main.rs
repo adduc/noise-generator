@@ -21,7 +21,7 @@ use gtk::{
 use audio::Controls;
 use noise::{Preset, BAND_COUNT, MAX_DB, MIN_DB};
 use player::{Player, PresetRef};
-use settings::Settings;
+use settings::{Settings, WindowState};
 use user_presets::PresetLibrary;
 
 const APP_ID: &str = "us.jlong.NoiseGenerator";
@@ -73,7 +73,9 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
             scale.set_digits(0);
             scale.set_draw_value(true);
             scale.set_value_pos(PositionType::Top);
+            // A minimum height; the sliders grow when the window is enlarged.
             scale.set_height_request(220);
+            scale.set_vexpand(true);
             scale.add_mark(0.0, PositionType::Right, None);
             scale
         })
@@ -163,15 +165,25 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
     let window = ApplicationWindow::builder()
         .application(app)
         .title("Noise Generator")
-        .resizable(false)
+        .maximized(settings.window.maximized)
         .child(&root)
         .build();
+    if let Some((width, height)) = settings.window.size {
+        window.set_default_size(width, height);
+    }
     {
         let player = player.clone();
-        window.connect_close_request(move |_| {
+        window.connect_close_request(move |window| {
+            // GTK keeps the default size in step with the unmaximized size,
+            // so a maximized window still restores to where it was.
+            let (width, height) = window.default_size();
             let settings = Settings {
                 band_db: player.band_db(),
                 volume: player.volume() as f32,
+                window: WindowState {
+                    size: (width > 0 && height > 0).then_some((width, height)),
+                    maximized: window.is_maximized(),
+                },
             };
             if let Err(err) = settings.save() {
                 eprintln!("failed to save settings: {err}");

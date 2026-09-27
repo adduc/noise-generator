@@ -37,7 +37,11 @@ pub struct WindowState {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { band_db: [0.0; BAND_COUNT], volume: DEFAULT_VOLUME, window: WindowState::default() }
+        Self {
+            band_db: [0.0; BAND_COUNT],
+            volume: DEFAULT_VOLUME,
+            window: WindowState::default(),
+        }
     }
 }
 
@@ -61,7 +65,11 @@ impl Settings {
         let volume = file
             .double(OUTPUT_GROUP, VOLUME_KEY)
             .map_or(DEFAULT_VOLUME, |v| (v as f32).clamp(0.0, 1.0));
-        Self { band_db, volume, window: read_window(&file) }
+        Self {
+            band_db,
+            volume,
+            window: read_window(&file),
+        }
     }
 
     fn save_to(&self, path: &Path) -> Result<(), glib::Error> {
@@ -80,8 +88,14 @@ impl Settings {
 /// Reads the window state. The size is used only if both dimensions are
 /// present and positive; GTK itself enforces the minimum size.
 fn read_window(file: &KeyFile) -> WindowState {
-    let width = file.integer(WINDOW_GROUP, WIDTH_KEY).ok().filter(|w| *w > 0);
-    let height = file.integer(WINDOW_GROUP, HEIGHT_KEY).ok().filter(|h| *h > 0);
+    let width = file
+        .integer(WINDOW_GROUP, WIDTH_KEY)
+        .ok()
+        .filter(|w| *w > 0);
+    let height = file
+        .integer(WINDOW_GROUP, HEIGHT_KEY)
+        .ok()
+        .filter(|h| *h > 0);
     WindowState {
         size: width.zip(height),
         maximized: file.boolean(WINDOW_GROUP, MAXIMIZED_KEY).unwrap_or(false),
@@ -141,7 +155,10 @@ mod tests {
         let saved = Settings {
             band_db: noise::Preset::Pink.band_db(),
             volume: 0.3,
-            window: WindowState { size: Some((640, 480)), maximized: true },
+            window: WindowState {
+                size: Some((640, 480)),
+                maximized: true,
+            },
         };
         saved.save_to(&path).unwrap();
 
@@ -185,7 +202,15 @@ mod tests {
     fn partial_or_invalid_size_is_ignored() {
         let only_width = read_window(&key_file("[window]\nwidth=800\n"));
         assert_eq!(only_width.size, None);
-        let negative = read_window(&key_file("[window]\nwidth=-5\nheight=600\nmaximized=true\n"));
-        assert_eq!(negative, WindowState { size: None, maximized: true });
+        let negative = read_window(&key_file(
+            "[window]\nwidth=-5\nheight=600\nmaximized=true\n",
+        ));
+        assert_eq!(
+            negative,
+            WindowState {
+                size: None,
+                maximized: true
+            }
+        );
     }
 }

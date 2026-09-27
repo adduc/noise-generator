@@ -13,7 +13,7 @@ use gtk::prelude::*;
 use gtk::{Button, Scale};
 
 use crate::audio::Controls;
-use crate::noise::{Preset, BAND_COUNT};
+use crate::noise::{BAND_COUNT, Preset};
 use crate::user_presets::PresetLibrary;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -102,7 +102,8 @@ impl Player {
             return;
         }
         self.controls.set_playing(playing);
-        self.play_button.set_label(if playing { "Pause" } else { "Play" });
+        self.play_button
+            .set_label(if playing { "Pause" } else { "Play" });
         self.notify();
     }
 
@@ -187,7 +188,9 @@ impl Player {
             .chain(self.library.names().into_iter().map(PresetRef::User))
             .collect();
         let len = cycle.len() as isize;
-        let position = cycle.iter().position(|p| Some(p) == self.current.borrow().as_ref());
+        let position = cycle
+            .iter()
+            .position(|p| Some(p) == self.current.borrow().as_ref());
         let index = match position {
             Some(i) => (i as isize + delta).rem_euclid(len),
             // From a custom EQ, "next" starts at the top and "previous" at the end.

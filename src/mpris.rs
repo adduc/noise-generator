@@ -9,10 +9,10 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use gtk::gio::{self, BusNameOwnerFlags, BusType, DBusConnection, DBusNodeInfo};
-use gtk::glib::{self, variant::ObjectPath, Variant};
-use gtk::prelude::*;
 use gtk::ApplicationWindow;
+use gtk::gio::{self, BusNameOwnerFlags, BusType, DBusConnection, DBusNodeInfo};
+use gtk::glib::{self, Variant, variant::ObjectPath};
+use gtk::prelude::*;
 
 use crate::player::Player;
 
@@ -96,8 +96,12 @@ fn register(
     player: &Rc<Player>,
 ) -> Result<(), glib::Error> {
     let node = DBusNodeInfo::for_xml(INTROSPECTION_XML)?;
-    let root_info = node.lookup_interface(ROOT_IFACE).expect("root interface in XML");
-    let player_info = node.lookup_interface(PLAYER_IFACE).expect("player interface in XML");
+    let root_info = node
+        .lookup_interface(ROOT_IFACE)
+        .expect("root interface in XML");
+    let player_info = node
+        .lookup_interface(PLAYER_IFACE)
+        .expect("player interface in XML");
 
     let window = window.clone();
     connection
@@ -175,7 +179,12 @@ fn register(
 
 fn player_property(player: &Player, property: &str) -> Variant {
     match property {
-        "PlaybackStatus" => if player.is_playing() { "Playing" } else { "Paused" }.to_variant(),
+        "PlaybackStatus" => if player.is_playing() {
+            "Playing"
+        } else {
+            "Paused"
+        }
+        .to_variant(),
         "Metadata" => metadata(player).to_variant(),
         "Volume" => player.volume().to_variant(),
         "Position" => 0i64.to_variant(),
@@ -191,6 +200,9 @@ fn metadata(player: &Player) -> HashMap<String, Variant> {
     HashMap::from([
         ("mpris:trackid".to_string(), track_id.to_variant()),
         ("xesam:title".to_string(), player.title().to_variant()),
-        ("xesam:artist".to_string(), vec!["Noise Generator".to_string()].to_variant()),
+        (
+            "xesam:artist".to_string(),
+            vec!["Noise Generator".to_string()].to_variant(),
+        ),
     ])
 }

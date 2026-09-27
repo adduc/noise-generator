@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 John Long
 
-//! Persists EQ, the active preset and volume between runs in an INI-style file under the XDG
-//! config dir (usually ~/.config/noise-generator/settings.ini). GLib's
-//! KeyFile is used instead of GSettings, which would need an installed schema.
+//! Persists EQ, the active preset, volume and window size between runs in an
+//! INI-style file under the XDG config dir (usually
+//! ~/.config/noise-generator/settings.ini). GLib's KeyFile is used instead of
+//! GSettings, which would need an installed schema.
 
 use std::path::{Path, PathBuf};
 
@@ -19,17 +20,35 @@ const USER_PRESET_KEY: &str = "user_preset";
 const OUTPUT_GROUP: &str = "output";
 const VOLUME_KEY: &str = "volume";
 const DEFAULT_VOLUME: f32 = 0.5;
+const WINDOW_GROUP: &str = "window";
+const WIDTH_KEY: &str = "width";
+const HEIGHT_KEY: &str = "height";
+const MAXIMIZED_KEY: &str = "maximized";
 
 pub struct Settings {
     pub band_db: [f32; BAND_COUNT],
     /// The preset `band_db` came from, if the EQ wasn't hand-tweaked.
     pub preset: Option<PresetRef>,
     pub volume: f32,
+    pub window: WindowState,
+}
+
+/// The window's unmaximized size, and whether it was maximized. A `None`
+/// size means the window opens at its natural size.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct WindowState {
+    pub size: Option<(i32, i32)>,
+    pub maximized: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { band_db: [0.0; BAND_COUNT], preset: None, volume: DEFAULT_VOLUME }
+        Self {
+            band_db: [0.0; BAND_COUNT],
+            preset: None,
+            volume: DEFAULT_VOLUME,
+            window: WindowState::default(),
+        }
     }
 }
 
@@ -54,7 +73,7 @@ impl Settings {
         let volume = file
             .double(OUTPUT_GROUP, VOLUME_KEY)
             .map_or(DEFAULT_VOLUME, |v| (v as f32).clamp(0.0, 1.0));
-        Self { band_db, preset, volume }
+        Self { band_db, preset, volume, window: read_window(&file) }
     }
 
     fn save_to(&self, path: &Path) -> Result<(), glib::Error> {
@@ -68,6 +87,11 @@ impl Settings {
             None => {}
         }
         file.set_double(OUTPUT_GROUP, VOLUME_KEY, self.volume as f64);
+        if let Some((width, height)) = self.window.size {
+            file.set_integer(WINDOW_GROUP, WIDTH_KEY, width);
+            file.set_integer(WINDOW_GROUP, HEIGHT_KEY, height);
+        }
+        file.set_boolean(WINDOW_GROUP, MAXIMIZED_KEY, self.window.maximized);
         save_key_file(&file, path)
     }
 }
@@ -83,6 +107,17 @@ fn read_preset(file: &KeyFile) -> Option<PresetRef> {
     }
     let name = file.string(EQ_GROUP, USER_PRESET_KEY).ok()?;
     Some(PresetRef::User(name.to_string()))
+}
+
+/// Reads the window state. The size is used only if both dimensions are
+/// present and positive; GTK itself enforces the minimum size.
+fn read_window(file: &KeyFile) -> WindowState {
+    let width = file.integer(WINDOW_GROUP, WIDTH_KEY).ok().filter(|w| *w > 0);
+    let height = file.integer(WINDOW_GROUP, HEIGHT_KEY).ok().filter(|h| *h > 0);
+    WindowState {
+        size: width.zip(height),
+        maximized: file.boolean(WINDOW_GROUP, MAXIMIZED_KEY).unwrap_or(false),
+    }
 }
 
 pub fn config_dir() -> PathBuf {
@@ -139,6 +174,7 @@ mod tests {
             band_db: Preset::Pink.band_db(),
             preset: Some(PresetRef::Builtin(Preset::Pink)),
             volume: 0.3,
+            window: WindowState { size: Some((640, 480)), maximized: true },
         };
         saved.save_to(&path).unwrap();
 
@@ -146,6 +182,7 @@ mod tests {
         assert_eq!(loaded.band_db, saved.band_db);
         assert_eq!(loaded.preset, saved.preset);
         assert_eq!(loaded.volume, saved.volume);
+        assert_eq!(loaded.window, saved.window);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -184,6 +221,7 @@ mod tests {
         assert_eq!(loaded.band_db[0], 0.0); // unparsable -> default
         assert_eq!(loaded.band_db[2], -6.0);
         assert_eq!(loaded.volume, DEFAULT_VOLUME); // missing -> default
+        assert_eq!(loaded.window, WindowState::default());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -193,5 +231,19 @@ mod tests {
         assert_eq!(loaded.band_db, [0.0; BAND_COUNT]);
         assert_eq!(loaded.preset, None);
         assert_eq!(loaded.volume, DEFAULT_VOLUME);
+    }
+
+    fn key_file(contents: &str) -> KeyFile {
+        let file = KeyFile::new();
+        file.load_from_data(contents, KeyFileFlags::NONE).unwrap();
+        file
+    }
+
+    #[test]
+    fn partial_or_invalid_size_is_ignored() {
+        let only_width = read_window(&key_file("[window]\nwidth=800\n"));
+        assert_eq!(only_width.size, None);
+        let negative = read_window(&key_file("[window]\nwidth=-5\nheight=600\nmaximized=true\n"));
+        assert_eq!(negative, WindowState { size: None, maximized: true });
     }
 }

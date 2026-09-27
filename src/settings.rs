@@ -10,8 +10,7 @@ use std::path::{Path, PathBuf};
 
 use gtk::glib::{self, KeyFile, KeyFileFlags};
 
-use crate::noise::{self, BAND_COUNT, MAX_DB, MIN_DB, Preset};
-use crate::player::PresetRef;
+use crate::noise::{self, BAND_COUNT, MAX_DB, MIN_DB, Preset, PresetRef};
 
 const EQ_GROUP: &str = "eq";
 // Separate keys, so a saved preset named like a built-in one stays distinct.
@@ -114,16 +113,9 @@ fn read_preset(file: &KeyFile) -> Option<PresetRef> {
 /// Reads the window state. The size is used only if both dimensions are
 /// present and positive; GTK itself enforces the minimum size.
 fn read_window(file: &KeyFile) -> WindowState {
-    let width = file
-        .integer(WINDOW_GROUP, WIDTH_KEY)
-        .ok()
-        .filter(|w| *w > 0);
-    let height = file
-        .integer(WINDOW_GROUP, HEIGHT_KEY)
-        .ok()
-        .filter(|h| *h > 0);
+    let dimension = |key| file.integer(WINDOW_GROUP, key).ok().filter(|v| *v > 0);
     WindowState {
-        size: width.zip(height),
+        size: dimension(WIDTH_KEY).zip(dimension(HEIGHT_KEY)),
         maximized: file.boolean(WINDOW_GROUP, MAXIMIZED_KEY).unwrap_or(false),
     }
 }
@@ -168,15 +160,11 @@ pub fn save_key_file(file: &KeyFile, path: &Path) -> Result<(), glib::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A per-test directory, so tests running in parallel never share files.
-    fn temp_dir(test: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("noise-generator-{}-{test}", std::process::id()))
-    }
+    use crate::test_util::TempDir;
 
     #[test]
     fn round_trips_through_file() {
-        let dir = temp_dir("round_trip");
+        let dir = TempDir::new("round_trip");
         let path = dir.join("nested/settings.ini");
         let saved = Settings {
             band_db: Preset::Pink.band_db(),
@@ -194,12 +182,11 @@ mod tests {
         assert_eq!(loaded.preset, saved.preset);
         assert_eq!(loaded.volume, saved.volume);
         assert_eq!(loaded.window, saved.window);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn round_trips_user_preset() {
-        let dir = temp_dir("user_preset");
+        let dir = TempDir::new("user_preset");
         let path = dir.join("settings.ini");
         // A user preset may share a built-in's label; it must stay a user preset.
         let saved = Settings {
@@ -209,25 +196,21 @@ mod tests {
         saved.save_to(&path).unwrap();
 
         assert_eq!(Settings::load_from(&path).preset, saved.preset);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn unknown_builtin_preset_is_ignored() {
-        let dir = temp_dir("unknown_builtin");
+        let dir = TempDir::new("unknown_builtin");
         let path = dir.join("settings.ini");
-        std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(&path, "[eq]\nbuiltin_preset=Plaid\n").unwrap();
 
         assert_eq!(Settings::load_from(&path).preset, None);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn bad_values_fall_back_individually() {
-        let dir = temp_dir("bad_values");
+        let dir = TempDir::new("bad_values");
         let path = dir.join("settings.ini");
-        std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(&path, "[eq]\nband_1k=99\nband_31=oops\nband_125=-6\n").unwrap();
 
         let loaded = Settings::load_from(&path);
@@ -236,12 +219,11 @@ mod tests {
         assert_eq!(loaded.band_db[2], -6.0);
         assert_eq!(loaded.volume, DEFAULT_VOLUME); // missing -> default
         assert_eq!(loaded.window, WindowState::default());
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn missing_file_gives_defaults() {
-        let loaded = Settings::load_from(&temp_dir("missing").join("settings.ini"));
+        let loaded = Settings::load_from(&TempDir::new("missing").join("settings.ini"));
         assert_eq!(loaded.band_db, [0.0; BAND_COUNT]);
         assert_eq!(loaded.preset, None);
         assert_eq!(loaded.volume, DEFAULT_VOLUME);

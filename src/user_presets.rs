@@ -117,14 +117,11 @@ pub fn is_valid_name(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn temp_dir(test: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("noise-generator-{}-{test}", std::process::id()))
-    }
+    use crate::test_util::TempDir;
 
     #[test]
     fn save_get_delete_round_trip_through_disk() {
-        let dir = temp_dir("presets_round_trip");
+        let dir = TempDir::new("presets_round_trip");
         let path = dir.join("presets.ini");
         let bands: [f32; BAND_COUNT] = std::array::from_fn(|i| i as f32 - 4.0);
 
@@ -150,13 +147,11 @@ mod tests {
         let library = PresetLibrary::open_at(path);
         assert_eq!(library.names(), ["Brownish", "rainy Night"]);
         assert_eq!(library.get("Brownish"), Some([-2.0; BAND_COUNT]));
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn corrupt_file_is_backed_up_not_overwritten() {
-        let dir = temp_dir("presets_corrupt");
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = TempDir::new("presets_corrupt");
         let path = dir.join("presets.ini");
         std::fs::write(&path, "this is not an ini file\n").unwrap();
 
@@ -167,12 +162,11 @@ mod tests {
         let backup = std::fs::read_to_string(dir.join("presets.ini.bak")).unwrap();
         assert_eq!(backup, "this is not an ini file\n");
         assert_eq!(PresetLibrary::open_at(path).names(), ["New"]);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn rename_moves_bands_and_refuses_to_clobber() {
-        let dir = temp_dir("presets_rename");
+        let dir = TempDir::new("presets_rename");
         let path = dir.join("presets.ini");
         let rain: [f32; BAND_COUNT] = std::array::from_fn(|i| i as f32);
         let library = PresetLibrary::open_at(path.clone());
@@ -199,7 +193,6 @@ mod tests {
         assert_eq!(library.get("Rain"), Some(rain));
         assert_eq!(library.get("rain"), None);
         assert_eq!(library.get("Wind"), Some([-3.0; BAND_COUNT])); // untouched
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

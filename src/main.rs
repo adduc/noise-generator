@@ -14,12 +14,12 @@ use std::sync::Arc;
 
 use gtk::prelude::*;
 use gtk::{
-    glib, Align, Application, ApplicationWindow, Box as GtkBox, Button, Entry, Label, ListBox,
-    MenuButton, Orientation, Popover, PositionType, Scale, ScrolledWindow,
+    Align, Application, ApplicationWindow, Box as GtkBox, Button, Entry, Label, ListBox,
+    MenuButton, Orientation, Popover, PositionType, Scale, ScrolledWindow, glib,
 };
 
 use audio::Controls;
-use noise::{Preset, BAND_COUNT, MAX_DB, MIN_DB};
+use noise::{BAND_COUNT, MAX_DB, MIN_DB, Preset};
 use player::{Player, PresetRef};
 use settings::{Settings, WindowState};
 use user_presets::PresetLibrary;
@@ -110,7 +110,10 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
         .margin_end(24)
         .build();
 
-    let title = Label::builder().label("Noise Generator").css_classes(["title-1"]).build();
+    let title = Label::builder()
+        .label("Noise Generator")
+        .css_classes(["title-1"])
+        .build();
     root.append(&title);
 
     // Equalizer: one vertical slider per octave band.
@@ -120,9 +123,17 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
         .homogeneous(true)
         .build();
     for (band, scale) in sliders.iter().enumerate() {
-        let column = GtkBox::builder().orientation(Orientation::Vertical).spacing(4).build();
+        let column = GtkBox::builder()
+            .orientation(Orientation::Vertical)
+            .spacing(4)
+            .build();
         column.append(scale);
-        column.append(&Label::builder().label(noise::band_label(band)).css_classes(["caption"]).build());
+        column.append(
+            &Label::builder()
+                .label(noise::band_label(band))
+                .css_classes(["caption"])
+                .build(),
+        );
         eq_row.append(&column);
     }
     root.append(&eq_row);
@@ -159,7 +170,10 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
     preset_row.append(&PresetMenu::build(player.clone()));
     root.append(&preset_row);
 
-    let volume_row = GtkBox::builder().orientation(Orientation::Horizontal).spacing(12).build();
+    let volume_row = GtkBox::builder()
+        .orientation(Orientation::Horizontal)
+        .spacing(12)
+        .build();
     volume_row.append(&Label::new(Some("Volume")));
     volume_row.append(&volume);
     root.append(&volume_row);
@@ -214,8 +228,14 @@ struct PresetMenu {
 
 impl PresetMenu {
     fn build(player: Rc<Player>) -> MenuButton {
-        let entry = Entry::builder().placeholder_text("Preset name").hexpand(true).build();
-        let save = Button::builder().label("Save").css_classes(["suggested-action"]).build();
+        let entry = Entry::builder()
+            .placeholder_text("Preset name")
+            .hexpand(true)
+            .build();
+        let save = Button::builder()
+            .label("Save")
+            .css_classes(["suggested-action"])
+            .build();
         let save_row = GtkBox::builder()
             .orientation(Orientation::Horizontal)
             .css_classes(["linked"])
@@ -223,7 +243,9 @@ impl PresetMenu {
         save_row.append(&entry);
         save_row.append(&save);
 
-        let list = ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
+        let list = ListBox::builder()
+            .selection_mode(gtk::SelectionMode::None)
+            .build();
         list.set_placeholder(Some(
             &Label::builder()
                 .label("No saved presets yet")
@@ -289,7 +311,12 @@ impl PresetMenu {
     fn update_save_button(&self) {
         let name = self.name();
         self.save.set_sensitive(user_presets::is_valid_name(&name));
-        self.save.set_label(if self.player.library().get(&name).is_some() { "Overwrite" } else { "Save" });
+        self.save
+            .set_label(if self.player.library().get(&name).is_some() {
+                "Overwrite"
+            } else {
+                "Save"
+            });
     }
 
     fn save_current(self: &Rc<Self>) {
@@ -393,7 +420,9 @@ impl PresetMenu {
         let m = self.clone();
         delete.connect_clicked(move |_| m.delete(&name));
 
-        let row = GtkBox::builder().orientation(Orientation::Horizontal).build();
+        let row = GtkBox::builder()
+            .orientation(Orientation::Horizontal)
+            .build();
         row.append(&load);
         row.append(&rename);
         row.append(&delete);

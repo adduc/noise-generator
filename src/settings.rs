@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use gtk::glib::{self, KeyFile, KeyFileFlags};
 
-use crate::noise::{self, Preset, BAND_COUNT, MAX_DB, MIN_DB};
+use crate::noise::{self, BAND_COUNT, MAX_DB, MIN_DB, Preset};
 use crate::player::PresetRef;
 
 const EQ_GROUP: &str = "eq";
@@ -73,7 +73,12 @@ impl Settings {
         let volume = file
             .double(OUTPUT_GROUP, VOLUME_KEY)
             .map_or(DEFAULT_VOLUME, |v| (v as f32).clamp(0.0, 1.0));
-        Self { band_db, preset, volume, window: read_window(&file) }
+        Self {
+            band_db,
+            preset,
+            volume,
+            window: read_window(&file),
+        }
     }
 
     fn save_to(&self, path: &Path) -> Result<(), glib::Error> {
@@ -112,8 +117,14 @@ fn read_preset(file: &KeyFile) -> Option<PresetRef> {
 /// Reads the window state. The size is used only if both dimensions are
 /// present and positive; GTK itself enforces the minimum size.
 fn read_window(file: &KeyFile) -> WindowState {
-    let width = file.integer(WINDOW_GROUP, WIDTH_KEY).ok().filter(|w| *w > 0);
-    let height = file.integer(WINDOW_GROUP, HEIGHT_KEY).ok().filter(|h| *h > 0);
+    let width = file
+        .integer(WINDOW_GROUP, WIDTH_KEY)
+        .ok()
+        .filter(|w| *w > 0);
+    let height = file
+        .integer(WINDOW_GROUP, HEIGHT_KEY)
+        .ok()
+        .filter(|h| *h > 0);
     WindowState {
         size: width.zip(height),
         maximized: file.boolean(WINDOW_GROUP, MAXIMIZED_KEY).unwrap_or(false),
@@ -174,7 +185,10 @@ mod tests {
             band_db: Preset::Pink.band_db(),
             preset: Some(PresetRef::Builtin(Preset::Pink)),
             volume: 0.3,
-            window: WindowState { size: Some((640, 480)), maximized: true },
+            window: WindowState {
+                size: Some((640, 480)),
+                maximized: true,
+            },
         };
         saved.save_to(&path).unwrap();
 
@@ -191,7 +205,10 @@ mod tests {
         let dir = temp_dir("user_preset");
         let path = dir.join("settings.ini");
         // A user preset may share a built-in's label; it must stay a user preset.
-        let saved = Settings { preset: Some(PresetRef::User("Pink".into())), ..Default::default() };
+        let saved = Settings {
+            preset: Some(PresetRef::User("Pink".into())),
+            ..Default::default()
+        };
         saved.save_to(&path).unwrap();
 
         assert_eq!(Settings::load_from(&path).preset, saved.preset);
@@ -243,7 +260,15 @@ mod tests {
     fn partial_or_invalid_size_is_ignored() {
         let only_width = read_window(&key_file("[window]\nwidth=800\n"));
         assert_eq!(only_width.size, None);
-        let negative = read_window(&key_file("[window]\nwidth=-5\nheight=600\nmaximized=true\n"));
-        assert_eq!(negative, WindowState { size: None, maximized: true });
+        let negative = read_window(&key_file(
+            "[window]\nwidth=-5\nheight=600\nmaximized=true\n",
+        ));
+        assert_eq!(
+            negative,
+            WindowState {
+                size: None,
+                maximized: true
+            }
+        );
     }
 }

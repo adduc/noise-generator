@@ -36,7 +36,8 @@ impl Controls {
     }
 
     pub fn set_volume(&self, volume: f32) {
-        self.volume.store(volume.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+        self.volume
+            .store(volume.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
     }
 
     pub fn set_playing(&self, playing: bool) {
@@ -116,7 +117,11 @@ where
             }
             let volume = controls.volume();
             // Squared for a more natural-feeling volume slider.
-            let master_target = if controls.playing() { volume * volume } else { 0.0 };
+            let master_target = if controls.playing() {
+                volume * volume
+            } else {
+                0.0
+            };
 
             for frame in data.chunks_mut(channels) {
                 master += (master_target - master) * smoothing;

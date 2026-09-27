@@ -90,9 +90,7 @@ impl Preset {
 
     pub fn band_db(self) -> [f32; BAND_COUNT] {
         let slope = self.slope_db_per_octave();
-        std::array::from_fn(|i| {
-            (slope * (i as f32 - REFERENCE_BAND as f32)).clamp(MIN_DB, MAX_DB)
-        })
+        std::array::from_fn(|i| (slope * (i as f32 - REFERENCE_BAND as f32)).clamp(MIN_DB, MAX_DB))
     }
 }
 
@@ -112,7 +110,14 @@ impl BandPass {
     fn new(freq: f32, q: f32, sample_rate: f32) -> Self {
         // Bands at or near Nyquist can't be represented; leave them silent.
         if freq >= 0.45 * sample_rate {
-            return Self { b0: 0.0, a1: 0.0, a2: 0.0, z1: 0.0, z2: 0.0, noise_gain: 0.0 };
+            return Self {
+                b0: 0.0,
+                a1: 0.0,
+                a2: 0.0,
+                z1: 0.0,
+                z2: 0.0,
+                noise_gain: 0.0,
+            };
         }
         let w0 = std::f32::consts::TAU * freq / sample_rate;
         let alpha = w0.sin() / (2.0 * q);
@@ -212,8 +217,14 @@ mod tests {
                     peak = peak.max(s.abs());
                 }
                 let rms = (sum_sq / n as f64).sqrt() as f32;
-                println!("{sample_rate} {:>6}: rms {rms:.3} peak {peak:.3}", preset.label());
-                assert!((rms - TARGET_RMS).abs() < 0.1 * TARGET_RMS, "{preset:?} rms {rms}");
+                println!(
+                    "{sample_rate} {:>6}: rms {rms:.3} peak {peak:.3}",
+                    preset.label()
+                );
+                assert!(
+                    (rms - TARGET_RMS).abs() < 0.1 * TARGET_RMS,
+                    "{preset:?} rms {rms}"
+                );
                 assert!(peak <= 1.0, "{preset:?} peak {peak}");
             }
         }

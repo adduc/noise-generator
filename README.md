@@ -33,7 +33,7 @@ for the classic noise colors.
 
 ## Requirements
 
-- Rust 1.85 or newer (the crate uses edition 2024)
+- Rust 1.92 or newer (required by the gtk4 bindings)
 - GTK 4.12 or newer, with its development headers
 - ALSA development headers, used by [`cpal`](https://crates.io/crates/cpal)
   for audio output. PipeWire and PulseAudio systems work through their ALSA

@@ -13,14 +13,8 @@ use gtk::prelude::*;
 use gtk::{Button, Scale};
 
 use crate::audio::Controls;
-use crate::noise::{BAND_COUNT, Preset};
+use crate::noise::{BAND_COUNT, Preset, PresetRef};
 use crate::user_presets::PresetLibrary;
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum PresetRef {
-    Builtin(Preset),
-    User(String),
-}
 
 pub struct Player {
     controls: Arc<Controls>,
@@ -111,13 +105,13 @@ impl Player {
         self.set_playing(!self.is_playing());
     }
 
-    pub fn volume(&self) -> f64 {
-        self.volume.value()
+    pub fn volume(&self) -> f32 {
+        self.volume.value() as f32
     }
 
     /// Moves the volume slider, whose handler updates audio and listeners.
-    pub fn set_volume(&self, volume: f64) {
-        self.volume.set_value(volume.clamp(0.0, 1.0));
+    pub fn set_volume(&self, volume: f32) {
+        self.volume.set_value(volume.clamp(0.0, 1.0) as f64);
     }
 
     pub fn band_db(&self) -> [f32; BAND_COUNT] {
@@ -196,16 +190,9 @@ impl Player {
         }
     }
 
-    /// Steps through built-in presets, then saved ones, wrapping around.
-    pub fn next_preset(&self) {
-        self.step_preset(1);
-    }
-
-    pub fn previous_preset(&self) {
-        self.step_preset(-1);
-    }
-
-    fn step_preset(&self, delta: isize) {
+    /// Steps `delta` places through built-in presets, then saved ones,
+    /// wrapping around.
+    pub fn step_preset(&self, delta: isize) {
         let cycle: Vec<PresetRef> = Preset::ALL
             .into_iter()
             .map(PresetRef::Builtin)

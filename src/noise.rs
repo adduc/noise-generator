@@ -99,6 +99,13 @@ impl Preset {
     }
 }
 
+/// A preset the sliders can be set from: a built-in color or a saved one.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PresetRef {
+    Builtin(Preset),
+    User(String),
+}
+
 /// RBJ "constant 0 dB peak gain" band-pass biquad.
 #[derive(Clone, Copy, Default)]
 struct BandPass {
@@ -153,7 +160,7 @@ pub fn band_gains(
     band_db: &[f32; BAND_COUNT],
     band_variances: &[f32; BAND_COUNT],
 ) -> [f32; BAND_COUNT] {
-    let mut gains: [f32; BAND_COUNT] = std::array::from_fn(|i| 10f32.powf(band_db[i] / 20.0));
+    let mut gains = band_db.map(|db| 10f32.powf(db / 20.0));
     let variance: f32 = gains
         .iter()
         .zip(band_variances)

@@ -46,7 +46,9 @@ impl Controls {
     }
 
     fn band_db(&self) -> [f32; BAND_COUNT] {
-        std::array::from_fn(|i| f32::from_bits(self.band_db[i].load(Ordering::Relaxed)))
+        self.band_db
+            .each_ref()
+            .map(|db| f32::from_bits(db.load(Ordering::Relaxed)))
     }
 
     fn volume(&self) -> f32 {

@@ -6,6 +6,8 @@ mod mpris;
 mod noise;
 mod player;
 mod settings;
+#[cfg(test)]
+mod test_util;
 mod user_presets;
 
 use std::cell::RefCell;
@@ -19,8 +21,8 @@ use gtk::{
 };
 
 use audio::Controls;
-use noise::{BAND_COUNT, MAX_DB, MIN_DB, Preset};
-use player::{Player, PresetRef};
+use noise::{BAND_COUNT, MAX_DB, MIN_DB, Preset, PresetRef};
+use player::Player;
 use settings::{Settings, WindowState};
 use user_presets::PresetLibrary;
 
@@ -192,7 +194,7 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
             let settings = Settings {
                 band_db: player.band_db(),
                 preset: player.current(),
-                volume: player.volume() as f32,
+                volume: player.volume(),
                 window: WindowState {
                     size: (width > 0 && height > 0).then_some((width, height)),
                     maximized: window.is_maximized(),

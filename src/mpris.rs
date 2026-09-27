@@ -74,7 +74,7 @@ const INTROSPECTION_XML: &str = r#"
 
 /// Claims the MPRIS bus name and exports the player once the session bus
 /// is available. Failure (e.g. no session bus) just means no media keys.
-pub fn start(window: &ApplicationWindow, player: Rc<Player>) -> gio::OwnerId {
+pub fn start(window: &ApplicationWindow, player: Rc<Player>) {
     let window = window.clone();
     gio::bus_own_name(
         BusType::Session,
@@ -87,7 +87,7 @@ pub fn start(window: &ApplicationWindow, player: Rc<Player>) -> gio::OwnerId {
         },
         |_, _| {},
         |_, name| eprintln!("could not own D-Bus name {name}; media keys won't work"),
-    )
+    );
 }
 
 fn register(
@@ -126,6 +126,7 @@ fn register(
 
     let p = player.clone();
     let p2 = player.clone();
+    let p3 = player.clone();
     connection
         .register_object(OBJECT_PATH, &player_info)
         .method_call(move |_, _, _, _, method, _, invocation| {
@@ -134,24 +135,21 @@ fn register(
                 // There's no position to return to, so Stop is the same as Pause.
                 "Pause" | "Stop" => p.set_playing(false),
                 "PlayPause" => p.toggle(),
-                "Next" => p.next_preset(),
-                "Previous" => p.previous_preset(),
+                "Next" => p.step_preset(1),
+                "Previous" => p.step_preset(-1),
                 _ => {} // Seek, SetPosition, OpenUri: no-ops, as CanSeek is false.
             }
             invocation.return_value(None);
         })
         .property(move |_, _, _, _, property| player_property(&p2, property))
-        .set_property({
-            let p = player.clone();
-            move |_, _, _, _, property, value| {
-                if property == "Volume"
-                    && let Some(volume) = value.get::<f64>()
-                {
-                    p.set_volume(volume);
-                }
-                // Rate is fixed at 1.0; the spec says to ignore other values.
-                true
+        .set_property(move |_, _, _, _, property, value| {
+            if property == "Volume"
+                && let Some(volume) = value.get::<f64>()
+            {
+                p3.set_volume(volume as f32);
             }
+            // Rate is fixed at 1.0; the spec says to ignore other values.
+            true
         })
         .build()?;
 
@@ -186,7 +184,7 @@ fn player_property(player: &Player, property: &str) -> Variant {
         }
         .to_variant(),
         "Metadata" => metadata(player).to_variant(),
-        "Volume" => player.volume().to_variant(),
+        "Volume" => f64::from(player.volume()).to_variant(),
         "Position" => 0i64.to_variant(),
         "Rate" | "MinimumRate" | "MaximumRate" => 1.0f64.to_variant(),
         "CanSeek" => false.to_variant(),

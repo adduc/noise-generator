@@ -144,10 +144,10 @@ fn register(
         .set_property({
             let p = player.clone();
             move |_, _, _, _, property, value| {
-                if property == "Volume" {
-                    if let Some(volume) = value.get::<f64>() {
-                        p.set_volume(volume);
-                    }
+                if property == "Volume"
+                    && let Some(volume) = value.get::<f64>()
+                {
+                    p.set_volume(volume);
                 }
                 // Rate is fixed at 1.0; the spec says to ignore other values.
                 true

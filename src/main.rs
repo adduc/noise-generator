@@ -95,6 +95,9 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
         volume.clone(),
         play.clone(),
     );
+    if let Some(preset) = settings.preset.clone() {
+        player.restore_current(preset);
+    }
 
     let root = GtkBox::builder()
         .orientation(Orientation::Vertical)
@@ -171,6 +174,7 @@ fn build_ui(app: &Application, controls: Arc<Controls>, settings: &Settings) {
         window.connect_close_request(move |_| {
             let settings = Settings {
                 band_db: player.band_db(),
+                preset: player.current(),
                 volume: player.volume() as f32,
             };
             if let Err(err) = settings.save() {

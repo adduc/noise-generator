@@ -81,6 +81,24 @@ sudo make install PREFIX=/usr/local
 
 `DESTDIR` is supported for staged installs when packaging.
 
+### Fedora RPM
+
+Each [release](https://github.com/adduc/noise-generator/releases) has an RPM
+for Fedora 44 (x86_64). Download it and install it with dnf:
+
+```sh
+sudo dnf install ./noise-generator-*.fc44.x86_64.rpm
+```
+
+To build the RPMs yourself, install the packaging tools and run `make rpm`.
+The source tarball comes from `git archive`, so only committed changes are
+included. The RPMs land in `target/rpmbuild/`.
+
+```sh
+sudo dnf install rpm-build cargo-rpm-macros desktop-file-utils appstream
+make rpm
+```
+
 The icon shows the ten equalizer bands, colored brown, pink, white, blue and
 violet from low to high frequency.
 
@@ -161,7 +179,8 @@ atomics, so the audio callback never waits on a lock or allocates memory.
 | `src/settings.rs`      | Loading and saving `settings.ini`                        |
 | `src/user_presets.rs`  | Saving, loading, renaming and deleting presets           |
 | `src/mpris.rs`         | MPRIS D-Bus interface                                     |
-| `data/`                | Desktop entry and app icons (full-color and symbolic)    |
+| `data/`                | Desktop entry, AppStream metainfo and app icons          |
+| `packaging/`           | RPM spec file and release scripts                        |
 
 ## Tests
 
@@ -172,6 +191,23 @@ make test
 The tests check that every preset produces the target loudness at 44.1 and
 48 kHz without clipping, and that settings and presets save and load
 correctly, including invalid values, corrupt files and rename conflicts.
+
+## Releasing
+
+1. Bump the version in `Cargo.toml` (then run `cargo check` to update
+   `Cargo.lock`), in `Version:` and `%changelog` in
+   `packaging/noise-generator.spec`, and add a `<release>` at the top of
+   `data/us.jlong.NoiseGenerator.metainfo.xml`.
+   `packaging/check-version.sh` confirms they agree, and CI runs it too.
+2. Merge, then tag and push:
+
+   ```sh
+   git tag v1.2.0
+   git push origin v1.2.0
+   ```
+
+The Release workflow builds the RPMs in a Fedora 44 container and attaches
+the binary and source RPMs to a GitHub release for the tag.
 
 ## License
 

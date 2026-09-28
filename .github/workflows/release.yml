@@ -1,0 +1,46 @@
+name: Release
+
+# Pushing a tag like v1.2.0 builds the Fedora RPMs and attaches them to a
+# GitHub release for that tag. Bump the version in Cargo.toml, the spec file
+# and the metainfo releases first; the build stops if they disagree.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  rpm:
+    runs-on: ubuntu-24.04
+    container: fedora:44
+    steps:
+      - name: Install build tools
+        run: >
+          dnf install -y git gh make rpm-build cargo-rpm-macros
+          'pkgconfig(gtk4)' 'pkgconfig(alsa)' desktop-file-utils appstream
+
+      - uses: actions/checkout@v7
+
+      # The checkout is owned by a different user than the container's root.
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - run: packaging/check-version.sh "$GITHUB_REF_NAME"
+
+      - run: make rpm
+
+      # The source RPM carries the vendored crates, so it rebuilds offline.
+      # debuginfo and debugsource are left out; they're only useful with a
+      # debuginfo repository behind them.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          files=$(find target/rpmbuild/SRPMS target/rpmbuild/RPMS -name '*.rpm' \
+              ! -name '*-debuginfo-*' ! -name '*-debugsource-*')
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" --clobber $files
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes $files
+          fi

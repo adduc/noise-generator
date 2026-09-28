@@ -63,6 +63,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - name: Install desktop-file-utils
-        run: sudo apt-get update && sudo apt-get install -y desktop-file-utils
+      - name: Install desktop-file-utils and appstream
+        run: sudo apt-get update && sudo apt-get install -y desktop-file-utils appstream
       - run: desktop-file-validate data/*.desktop
+      - run: appstreamcli validate --no-net data/*.metainfo.xml
+      # Catches a missed bump before the release tag does.
+      - run: packaging/check-version.sh

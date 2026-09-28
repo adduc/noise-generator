@@ -6,6 +6,7 @@
 #   make install         install the binary, desktop entry and icons
 #   make uninstall       remove everything `make install` put down
 #   make clean           remove build output
+#   make rpm             build a Fedora RPM (see packaging/build-rpm.sh)
 #
 # Installs into ~/.local by default, so no root is needed. For a system-wide
 # install, override PREFIX:
@@ -27,12 +28,13 @@ APP_ID  := us.jlong.NoiseGenerator
 TARGET  := target/release/$(BIN)
 
 DESKTOP       := data/$(APP_ID).desktop
+METAINFO      := data/$(APP_ID).metainfo.xml
 ICON          := data/icons/hicolor/scalable/apps/$(APP_ID).svg
 ICON_SYMBOLIC := data/icons/hicolor/symbolic/apps/$(APP_ID)-symbolic.svg
 
 ICONDIR := $(DATADIR)/icons/hicolor
 
-.PHONY: all build run test install uninstall clean
+.PHONY: all build run test install uninstall clean rpm
 
 all: build
 
@@ -51,6 +53,7 @@ install:
 	@test -x $(TARGET) || { echo "$(TARGET) not found; run 'make' first" >&2; exit 1; }
 	$(INSTALL) -Dm755 $(TARGET) $(DESTDIR)$(BINDIR)/$(BIN)
 	$(INSTALL) -Dm644 $(DESKTOP) $(DESTDIR)$(DATADIR)/applications/$(APP_ID).desktop
+	$(INSTALL) -Dm644 $(METAINFO) $(DESTDIR)$(DATADIR)/metainfo/$(APP_ID).metainfo.xml
 	$(INSTALL) -Dm644 $(ICON) $(DESTDIR)$(ICONDIR)/scalable/apps/$(APP_ID).svg
 	$(INSTALL) -Dm644 $(ICON_SYMBOLIC) $(DESTDIR)$(ICONDIR)/symbolic/apps/$(APP_ID)-symbolic.svg
 	@$(MAKE) --no-print-directory refresh-caches
@@ -58,12 +61,17 @@ install:
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(BIN)
 	rm -f $(DESTDIR)$(DATADIR)/applications/$(APP_ID).desktop
+	rm -f $(DESTDIR)$(DATADIR)/metainfo/$(APP_ID).metainfo.xml
 	rm -f $(DESTDIR)$(ICONDIR)/scalable/apps/$(APP_ID).svg
 	rm -f $(DESTDIR)$(ICONDIR)/symbolic/apps/$(APP_ID)-symbolic.svg
 	@$(MAKE) --no-print-directory refresh-caches
 
 clean:
 	$(CARGO) clean
+
+# Needs rpm-build and cargo-rpm-macros. Output lands in target/rpmbuild/.
+rpm:
+	packaging/build-rpm.sh
 
 # Tell the desktop about new or removed icons and launchers. Skipped for
 # staged installs, and when the tools aren't present.

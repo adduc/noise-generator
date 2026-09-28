@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (C) 2026 John Long -->
+<component type="desktop-application">
+  <id>us.jlong.NoiseGenerator</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <name>Noise Generator</name>
+  <summary>Play white, pink, brown and other colored noise</summary>
+  <developer id="us.jlong">
+    <name>John Long</name>
+  </developer>
+
+  <description>
+    <p>
+      Noise Generator plays continuous background noise, shaped with a
+      10-band equalizer. One-click presets cover the classic noise colors:
+      white, pink, brown, blue and violet.
+    </p>
+    <ul>
+      <li>Save your own equalizer settings as named presets</li>
+      <li>Constant loudness: switching presets changes the tone, not the volume</li>
+      <li>Media keys and desktop media controls through MPRIS</li>
+      <li>Remembers your equalizer and volume between sessions</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">us.jlong.NoiseGenerator.desktop</launchable>
+  <provides>
+    <binary>noise-generator</binary>
+  </provides>
+
+  <url type="homepage">https://github.com/adduc/noise-generator</url>
+  <url type="bugtracker">https://github.com/adduc/noise-generator/issues</url>
+  <url type="vcs-browser">https://github.com/adduc/noise-generator</url>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+  </categories>
+  <keywords>
+    <keyword>noise</keyword>
+    <keyword>white noise</keyword>
+    <keyword>pink noise</keyword>
+    <keyword>brown noise</keyword>
+    <keyword>sleep</keyword>
+    <keyword>focus</keyword>
+    <keyword>equalizer</keyword>
+  </keywords>
+
+  <content_rating type="oars-1.1"/>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+
+  <!-- Newest first. The version must match Cargo.toml and the spec file. -->
+  <releases>
+    <release version="0.1.0" date="2026-09-27">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
+</component>
